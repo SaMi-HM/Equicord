@@ -10,8 +10,9 @@ import { definePluginSettings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
-import { GuildStore, SelectedGuildStore, useState } from "@webpack/common";
-import { User } from "discord-types/general";
+import { User } from "@vencord/discord-types";
+import { GuildRoleStore, SelectedGuildStore, useState } from "@webpack/common";
+import { JSX } from "react";
 
 const settings = definePluginSettings({
     showAtSymbol: {
@@ -47,39 +48,43 @@ export default definePlugin({
     description: "Shows user avatars and role icons inside mentions",
     authors: [Devs.Ven, Devs.SerStars],
     patches: [{
+        // HEY THOR UPDATE SHOW ME YOUR NAME IF THIS SHIT CHANGES TY :)
         find: ".USER_MENTION)",
         replacement: {
-            match: /children:"@"\.concat\((null!=\i\?\i:\i)\)(?<=\.useName\((\i)\).+?)/,
-            replace: "children:$self.renderUsername({username:$1,user:$2})"
+            match: /"@"\.concat\((null!=\i\?\i:\i)\)(?<=\.useName\((\i)\).+?)/,
+            replace: "$self.renderUsername({username:$1,user:$2,showMeYourNameMention:typeof showMeYourNameMention!=='undefined'?showMeYourNameMention:undefined})"
         }
     },
     {
         find: ".ROLE_MENTION)",
         replacement: {
-            match: /children:\[\i&&.{0,50}\.RoleDot.{0,300},\i(?=\])/,
+            match: /children:\[\i&&.{0,100}className:\i.roleDot,.{0,200},\i(?=\])/,
             replace: "$&,$self.renderRoleIcon(arguments[0])"
         }
     }],
 
     settings,
 
-    renderUsername: ErrorBoundary.wrap((props: { user: User, username: string; }) => {
-        const { user, username } = props;
+    renderUsername: ErrorBoundary.wrap(({ user, username, showMeYourNameMention }: { user: User, username: string, showMeYourNameMention: JSX.Element | null | undefined; }) => {
         const [isHovering, setIsHovering] = useState(false);
 
-        if (!user) return <>{getUsernameString(username)}</>;
+        const nameContent = Vencord.Settings.plugins.ShowMeYourName.enabled && showMeYourNameMention
+            ? showMeYourNameMention : <>{getUsernameString(username)}</>;
 
         return (
             <span
                 onMouseEnter={() => setIsHovering(true)}
                 onMouseLeave={() => setIsHovering(false)}
+                className="vc-mentionAvatars-container"
             >
-                <img
-                    src={user.getAvatarURL(SelectedGuildStore.getGuildId(), 16, isHovering)}
-                    className="vc-mentionAvatars-icon"
-                    style={{ borderRadius: "50%" }}
-                />
-                {getUsernameString(username)}
+                {user && (
+                    <img
+                        src={user.getAvatarURL(SelectedGuildStore.getGuildId(), 16, isHovering)}
+                        className="vc-mentionAvatars-icon"
+                        style={{ borderRadius: "50%" }}
+                    />
+                )}
+                {nameContent}
             </span>
         );
     }, { noop: true }),
@@ -88,7 +93,7 @@ export default definePlugin({
         // Discord uses Role Mentions for uncached users because .... idk
         if (!roleId) return null;
 
-        const role = GuildStore.getRole(guildId, roleId);
+        const role = GuildRoleStore.getRole(guildId, roleId);
 
         if (!role?.icon) return <DefaultRoleIcon />;
 
@@ -98,7 +103,7 @@ export default definePlugin({
                 src={`${location.protocol}//${window.GLOBAL_ENV.CDN_HOST}/role-icons/${roleId}/${role.icon}.webp?size=24&quality=lossless`}
             />
         );
-    }),
+    }, { noop: true }),
 });
 
 function getUsernameString(username: string) {

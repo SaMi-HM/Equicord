@@ -17,7 +17,7 @@
 */
 
 import { findOption, RequiredMessageOption } from "@api/Commands";
-import { addPreEditListener, addPreSendListener, MessageObject, removePreEditListener, removePreSendListener } from "@api/MessageEvents";
+import { addMessagePreEditListener, addMessagePreSendListener, MessageObject, removeMessagePreEditListener, removeMessagePreSendListener } from "@api/MessageEvents";
 import { definePluginSettings } from "@api/Settings";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
@@ -151,7 +151,7 @@ function uwuifyArray(arr) {
 export default definePlugin({
     name: "UwUifier",
     description: "Make everything uwu",
-    authors: [Devs.echo],
+    authors: [Devs.amy],
     dependencies: ["MessageEventsAPI"],
     settings,
 
@@ -167,22 +167,16 @@ export default definePlugin({
         },
     ],
 
-    patches: [{
-        find: ".isPureReactComponent=!0;",
-        predicate: () => settings.store.uwuEverything,
-        replacement: {
-            match: /(?<=.defaultProps\)void 0.{0,60})props:(\i)/,
-            replace: "props:$self.uwuifyProps($1)"
+    patches: [
+        {
+            find: ".isPureReactComponent=!0;",
+            predicate: () => settings.store.uwuEverything,
+            replacement: {
+                match: /(?<=.defaultProps\)void 0.{0,60})(\i)\)/,
+                replace: "$self.uwuifyProps($1))"
+            }
         }
-    }, {
-        find: ".__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED.ReactCurrentOwner",
-        predicate: () => settings.store.uwuEverything,
-        replacement: {
-            match: /(?<=.defaultProps\)void 0.{0,60})props:(\i)/,
-            replace: "props:$self.uwuifyProps($1)"
-        },
-        all: true
-    }],
+    ],
 
     uwuifyProps(props: any) {
         if (!props.children) return props;
@@ -199,14 +193,14 @@ export default definePlugin({
     },
 
     start() {
-        this.preSend = addPreSendListener((_, msg) => this.onSend(msg));
-        this.preEdit = addPreEditListener((_cid, _mid, msg) =>
+        this.preSend = addMessagePreSendListener((_, msg) => this.onSend(msg));
+        this.preEdit = addMessagePreEditListener((_cid, _mid, msg) =>
             this.onSend(msg)
         );
     },
 
     stop() {
-        removePreSendListener(this.preSend);
-        removePreEditListener(this.preEdit);
+        removeMessagePreSendListener(this.preSend);
+        removeMessagePreEditListener(this.preEdit);
     },
 });

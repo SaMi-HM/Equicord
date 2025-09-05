@@ -17,14 +17,14 @@
 */
 
 import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
-import { addButton, removeButton } from "@api/MessagePopover";
+import { addMessagePopoverButton, removeMessagePopoverButton } from "@api/MessagePopover";
 import { classNameFactory } from "@api/Styles";
 import { EquicordDevs } from "@utils/constants";
 import { sendMessage } from "@utils/discord";
 import { classes } from "@utils/misc";
 import definePlugin from "@utils/types";
+import { Message } from "@vencord/discord-types";
 import { ChannelStore, Menu } from "@webpack/common";
-import { Message } from "discord-types/general";
 
 function RepeatMessageIcon({ className }: { className?: string; }) {
     return (
@@ -103,7 +103,7 @@ export default definePlugin({
         "message": messageCtxPatch
     },
     start() {
-        addButton("vc-repeat", message => {
+        addMessagePopoverButton("vc-repeat", message => {
             if (!message.content && message.stickerItems.length === 0) return null;
 
             return {
@@ -119,7 +119,7 @@ export default definePlugin({
         document.addEventListener("keydown", keydownListener);
     },
     stop() {
-        removeButton("vc-repeat");
+        removeMessagePopoverButton("vc-repeat");
 
         document.removeEventListener("keyup", keyupListener);
         document.removeEventListener("keydown", keydownListener);

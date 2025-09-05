@@ -10,7 +10,7 @@ import * as DataStore from "@api/DataStore";
 import { Settings } from "@api/Settings";
 import { ErrorCard } from "@components/ErrorCard";
 import { OpenExternalIcon } from "@components/Icons";
-import { SettingsTab, wrapTab } from "@components/VencordSettings/shared";
+import { SettingsTab, wrapTab } from "@components/settings";
 import { Logger } from "@utils/Logger";
 import { Margins } from "@utils/margins";
 import { classes } from "@utils/misc";
@@ -20,7 +20,7 @@ import { Button, Forms, React, SearchableSelect, TabBar, TextInput, useEffect, u
 import { SearchStatus, TabItem, Theme, ThemeLikeProps } from "../types";
 import { ThemeCard } from "./ThemeCard";
 
-const InputStyles = findByPropsLazy("inputDefault", "inputWrapper", "error");
+const InputStyles = findByPropsLazy("inputWrapper", "inputError", "error");
 
 export const apiUrl = "https://discord-themes.com/api";
 export const logger = new Logger("ThemeLibrary", "#e5c890");
@@ -122,7 +122,7 @@ function ThemeTab() {
 
     useEffect(() => {
         setThemeLinks(Vencord.Settings.themeLinks);
-    }, [Vencord.Settings.themeLinks]);
+    }, []);
 
     useEffect(() => {
         // likes only update after 12_000 due to cache
@@ -150,7 +150,7 @@ function ThemeTab() {
                             alignItems: "center",
                             height: "70vh",
                             fontSize: "1.5em",
-                            color: "var(--text-normal)"
+                            color: "var(--text-default)"
                         }}>
                         <p> Getting the latest themes... </p>
                         <p style={{
@@ -224,7 +224,6 @@ function ThemeTab() {
                                     clearable={false}
                                     onChange={v => onStatusChange(v as SearchStatus)}
                                     closeOnSelect={true}
-                                    className={InputStyles.inputDefault}
                                 />
                             </div>
                         </div>
@@ -246,7 +245,7 @@ function ThemeTab() {
                                 }}>
                                 <p style={{
                                     fontSize: "1em",
-                                    color: "var(--text-normal)"
+                                    color: "var(--text-default)"
                                 }}> No theme found. </p>
                                 <p style={{
                                     fontSize: ".75em",
@@ -272,10 +271,10 @@ function SubmitThemes() {
                 alignItems: "center",
                 height: "70vh",
                 fontSize: "1.5em",
-                color: "var(--text-normal)"
+                color: "var(--text-default)"
             }}>
             <p> This tab was replaced in favour of the new website: </p>
-            <p><a href="https://discord-themes.com">discord-themes.com</a></p>
+            <p><a href="https://discord-themes.com" target="_blank" rel="noreferrer">discord-themes.com</a></p>
             <p style={{
                 fontSize: ".75em",
                 color: "var(--text-muted)"

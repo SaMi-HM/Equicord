@@ -5,10 +5,11 @@
  */
 
 import { BadgeUserArgs, ProfileBadge } from "@api/Badges";
+import { Badges } from "@api/index";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Devs } from "@utils/constants";
 import { Margins } from "@utils/margins";
-import { Modals, ModalSize, openModal } from "@utils/modal";
+import { ModalContent, ModalHeader, ModalRoot, ModalSize, openModal } from "@utils/modal";
 import definePlugin from "@utils/types";
 import { Button, Flex, Forms, RelationshipStore } from "@webpack/common";
 
@@ -81,8 +82,8 @@ const ranks: rankInfo[] =
 function openRankModal(rank: rankInfo) {
     openModal(props => (
         <ErrorBoundary>
-            <Modals.ModalRoot {...props} size={ModalSize.DYNAMIC}>
-                <Modals.ModalHeader>
+            <ModalRoot {...props} size={ModalSize.DYNAMIC}>
+                <ModalHeader>
                     <Flex style={{ width: "100%", justifyContent: "center" }}>
                         <Forms.FormTitle
                             tag="h2"
@@ -95,16 +96,16 @@ function openRankModal(rank: rankInfo) {
                             {rank.title}
                         </Forms.FormTitle>
                     </Flex>
-                </Modals.ModalHeader>
-                <Modals.ModalContent>
+                </ModalHeader>
+                <ModalContent>
                     <div style={{ padding: "1em", textAlign: "center" }}>
                         <rank.assetSVG height="150px"></rank.assetSVG>
                         <Forms.FormText className={Margins.top16}>
                             {rank.description}
                         </Forms.FormText>
                     </div>
-                </Modals.ModalContent>
-            </Modals.ModalRoot>
+                </ModalContent>
+            </ModalRoot>
         </ErrorBoundary >
     ));
 }
@@ -120,23 +121,23 @@ function getBadgeComponent(rank,) {
     );
 }
 
+function shouldShowBadge(userId: string, requirement: number, index: number) {
+    if (!RelationshipStore.isFriend(userId)) return false;
+
+    const days = daysSince(RelationshipStore.getSince(userId));
+
+    if (ranks[index + 1] == null) return days > requirement;
+
+    return (days > requirement && days < ranks[index + 1].requirement);
+}
+
 function getBadgesToApply() {
-    const badgesToApply: ProfileBadge[] = ranks.map((rank, index, self) => {
+    const badgesToApply: ProfileBadge[] = ranks.map((rank, index) => {
         return (
             {
                 description: rank.title,
                 component: () => getBadgeComponent(rank),
-                shouldShow: (info: BadgeUserArgs) => {
-                    if (!RelationshipStore.isFriend(info.userId)) { return false; }
-
-                    const days = daysSince(RelationshipStore.getSince(info.userId));
-
-                    if (self[index + 1] == null) {
-                        return days > rank.requirement;
-                    }
-
-                    return (days > rank.requirement && days < self[index + 1].requirement);
-                },
+                shouldShow: (info: BadgeUserArgs) => shouldShowBadge(info.userId, rank.requirement, index),
             });
     });
 
@@ -148,10 +149,10 @@ export default definePlugin({
     description: "Adds badges showcasing how long you have been friends with a user for",
     authors: [Devs.Samwich],
     start() {
-        getBadgesToApply().forEach(thing => Vencord.Api.Badges.addBadge(thing));
+        getBadgesToApply().forEach(b => Badges.addProfileBadge(b));
 
     },
     stop() {
-        getBadgesToApply().forEach(thing => Vencord.Api.Badges.removeBadge(thing));
+        getBadgesToApply().forEach(b => Badges.removeProfileBadge(b));
     },
 });

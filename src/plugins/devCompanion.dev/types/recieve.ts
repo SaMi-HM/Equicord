@@ -27,7 +27,9 @@ export type SearchData =
     );
 
 export type FindOrSearchData =
-    | SearchData
+    | (SearchData & {
+        usePatched: boolean | null;
+    })
     | ({
         extractType: "find";
     } & _PrefixKeys<_CapitalizeKeys<FindData>, "find">);
@@ -60,7 +62,7 @@ export type FindData = {
     args: FindNode[];
 };
 
-export type IncomingMessage = DisablePlugin | RawId | DiffPatch | Reload | ExtractModule | TestPatch | TestFind | AllModules;
+export type IncomingMessage = DisablePlugin | RawId | DiffPatch | Reload | ExtractModule | TestPatch | TestFind | AllModules | I18nLookup;
 export type FullIncomingMessage = IncomingMessage & { nonce: number; };
 
 export type DisablePlugin = {
@@ -71,7 +73,20 @@ export type DisablePlugin = {
     };
 };
 
+export type I18nLookup = {
+    type: "i18n";
+    data: {
+        hashedKey: string;
+    };
+};
+
+/**
+ * @deprecated use {@link ExtractModule} instead
+ */
 export type RawId = {
+    /**
+     * @deprecated use {@link ExtractModule} instead
+     */
     type: "rawId";
     data: {
         id: number;

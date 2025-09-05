@@ -16,16 +16,15 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { addChatBarButton, ChatBarButton, removeChatBarButton } from "@api/ChatButtons";
-import { addButton, removeButton } from "@api/MessagePopover";
+import { ChatBarButton, ChatBarButtonFactory } from "@api/ChatButtons";
 import { updateMessage } from "@api/MessageUpdater";
 import { definePluginSettings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Devs } from "@utils/constants";
 import { getStegCloak } from "@utils/dependencies";
 import definePlugin, { OptionType, ReporterTestable } from "@utils/types";
+import { Message } from "@vencord/discord-types";
 import { ChannelStore, Constants, RestAPI, Tooltip } from "@webpack/common";
-import { Message } from "discord-types/general";
 
 import { buildDecModal } from "./components/DecryptionModal";
 import { buildEncModal } from "./components/EncryptionModal";
@@ -54,7 +53,7 @@ function Indicator() {
                     aria-label="Hidden Message Indicator (InvisibleChat)"
                     onMouseEnter={onMouseEnter}
                     onMouseLeave={onMouseLeave}
-                    src="https://github.com/SammCheese/invisible-chat/blob/1c1a1111d5aed4ddd04bb76a8f10d138944e1d5a/src/assets/lock.png"
+                    src="https://github.com/SammCheese/invisible-chat/raw/NewReplugged/src/assets/lock.png"
                     width={20}
                     height={20}
                     style={{ transform: "translateY(4p)", paddingInline: 4 }}
@@ -66,17 +65,12 @@ function Indicator() {
 
 }
 
-const settings = definePluginSettings({
-    savedPasswords: {
-        type: OptionType.STRING,
-        default: "password, Password",
-        description: "Saved Passwords (Seperated with a , )"
-    }
-});
+const ChatBarIcon: ChatBarButtonFactory = ({ isMainChat }) => {
+    if (!isMainChat) return null;
 
-const generateChatButton: ChatBarButton = () => {
     return (
-        <ChatBarButton tooltip="Encrypt Message"
+        <ChatBarButton
+            tooltip="Encrypt Message"
             onClick={() => buildEncModal()}
 
             buttonProps={{
@@ -86,8 +80,8 @@ const generateChatButton: ChatBarButton = () => {
             <svg
                 aria-hidden
                 role="img"
-                width="24"
-                height="24"
+                width="20"
+                height="20"
                 viewBox={"0 0 64 64"}
                 style={{ scale: "1.39", translate: "0 -1px" }}
             >
@@ -97,18 +91,26 @@ const generateChatButton: ChatBarButton = () => {
     );
 };
 
+const settings = definePluginSettings({
+    savedPasswords: {
+        type: OptionType.STRING,
+        default: "password, Password",
+        description: "Saved Passwords (Seperated with a , )"
+    }
+});
+
 export default definePlugin({
     name: "InvisibleChat",
     description: "Encrypt your Messages in a non-suspicious way!",
     authors: [Devs.SammCheese],
-    dependencies: ["MessagePopoverAPI", "ChatInputButtonAPI", "MessageUpdaterAPI"],
+    dependencies: ["MessageUpdaterAPI"],
     reporterTestable: ReporterTestable.Patches,
     settings,
 
     patches: [
         {
             // Indicator
-            find: "#{intl::MESSAGE_EDITED}",
+            find: ".SEND_FAILED,",
             replacement: {
                 match: /let\{className:\i,message:\i[^}]*\}=(\i)/,
                 replace: "try {$1 && $self.INV_REGEX.test($1.message.content) ? $1.content.push($self.indicator()) : null } catch {};$&"
@@ -124,31 +126,33 @@ export default definePlugin({
     async start() {
         const { default: StegCloak } = await getStegCloak();
         steggo = new StegCloak(true, false);
-
-        addButton("invDecrypt", message => {
-            return this.INV_REGEX.test(message?.content)
-                ? {
-                    label: "Decrypt Message",
-                    icon: this.popOverIcon,
-                    message: message,
-                    channel: ChannelStore.getChannel(message.channel_id),
-                    onClick: async () => {
-                        const res = await iteratePasswords(message);
-
-                        if (res)
-                            this.buildEmbed(message, res);
-                        else
-                            buildDecModal({ message });
-                    }
-                }
-                : null;
-        });
-        addChatBarButton("invButton", generateChatButton);
     },
 
-    stop() {
-        removeButton("invDecrypt");
-        removeChatBarButton("invButton");
+    renderMessagePopoverButton(message) {
+        return this.INV_REGEX.test(message?.content)
+            ? {
+                label: "Decrypt Message",
+                icon: this.popOverIcon,
+                message: message,
+                channel: ChannelStore.getChannel(message.channel_id),
+                onClick: async () => {
+                    const res = await iteratePasswords(message);
+
+                    if (res)
+                        this.buildEmbed(message, res);
+                    else
+                        buildDecModal({ message });
+                }
+            }
+            : null;
+    },
+
+    renderChatBarButton: ChatBarIcon,
+
+    colorCodeFromNumber(color: number): string {
+        return `#${[color >> 16, color >> 8, color]
+            .map(x => (x & 0xFF).toString(16))
+            .join("")}`;
     },
 
     // Gets the Embed of a Link
@@ -159,6 +163,8 @@ export default definePlugin({
                 urls: [url]
             }
         });
+        // The endpoint returns the color as a number, but Discord expects a string
+        body.embeds[0].color = this.colorCodeFromNumber(body.embeds[0].color);
         return await body.embeds[0];
     },
 
@@ -168,7 +174,7 @@ export default definePlugin({
         message.embeds.push({
             type: "rich",
             rawTitle: "Decrypted Message",
-            color: "0x45f5f5",
+            color: "#45f5f5",
             rawDescription: revealed,
             footer: {
                 text: "Made with ❤️ by c0dine and Sammy!",
@@ -184,7 +190,6 @@ export default definePlugin({
         updateMessage(message.channel_id, message.id, { embeds: message.embeds });
     },
 
-    chatBarIcon: ErrorBoundary.wrap(generateChatButton, { noop: true }),
     popOverIcon: () => <PopOverIcon />,
     indicator: ErrorBoundary.wrap(Indicator, { noop: true })
 });

@@ -18,23 +18,24 @@
 
 import { EquicordDevs } from "@utils/constants";
 import definePlugin from "@utils/types";
-import { Icons } from "@webpack/common";
-import { Message } from "discord-types/general";
+import { Message } from "@vencord/discord-types";
+import { findComponentByCodeLazy } from "@webpack";
 
+const PinIcon = findComponentByCodeLazy("1-.06-.63L6.16");
 export default definePlugin({
     name: "PinIcon",
     description: "Adds a pin icon to pinned messages",
     authors: [EquicordDevs.iamme],
     patches: [
         {
-            find: "#{intl::MESSAGE_EDITED}),",
+            find: "isUnsupported})",
             replacement: {
-                match: /#{intl::MESSAGE_EDITED}\),(?:[^}]*[}]){3}\)/,
+                match: /WITH_CONTENT\}\)/,
                 replace: "$&,$self.PinnedIcon(arguments[0].message)"
             }
         }
     ],
     PinnedIcon({ pinned }: Message) {
-        return pinned ? (<Icons.PinIcon size="xs" style={{ position: "absolute", right: "0", top: "0" }} />) : null;
+        return pinned ? (<PinIcon size="xs" style={{ position: "absolute", right: "0", top: "0" }} />) : null;
     }
 });

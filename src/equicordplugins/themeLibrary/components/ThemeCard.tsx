@@ -10,8 +10,8 @@ import { OpenExternalIcon } from "@components/Icons";
 import { proxyLazy } from "@utils/lazy";
 import { Margins } from "@utils/margins";
 import { ModalContent, ModalFooter, ModalHeader, ModalRoot, ModalSize, openModal } from "@utils/modal";
+import { User } from "@vencord/discord-types";
 import { Button, Card, FluxDispatcher, Forms, Parser, React, UserStore, UserUtils } from "@webpack/common";
-import { User } from "discord-types/general";
 import { Constructor } from "type-fest";
 
 import type { Theme, ThemeLikeProps } from "../types";
@@ -113,7 +113,7 @@ export const ThemeCard: React.FC<ThemeCardProps> = ({ theme, themeLinks, likedTh
     };
 
     return (
-        <Card style={{ padding: ".5rem", marginBottom: ".5em", marginTop: ".5em", display: "flex", flexDirection: "column", backgroundColor: "var(--background-secondary-alt)" }} key={theme.id}>
+        <Card style={{ padding: ".5rem", marginBottom: ".5em", marginTop: ".5em", display: "flex", flexDirection: "column", backgroundColor: "var(--background-base-lower-alt)" }} key={theme.id}>
             <Forms.FormTitle tag="h2" style={{ overflowWrap: "break-word", marginTop: 8 }} className="vce-theme-text">
                 {theme.name}
             </Forms.FormTitle>

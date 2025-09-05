@@ -1,10 +1,9 @@
 name: Release
 on:
     push:
-        tags:
-            - v*
         branches:
             - main
+
 env:
     FORCE_COLOR: true
     GITHUB_TOKEN: ${{ secrets.ETOKEN }}
@@ -38,11 +37,12 @@ jobs:
             - name: Build
               run: pnpm buildStandalone
 
-            - name: Generate plugin list
-              run: pnpm generatePluginJson dist/vencordplugins.json
-
-            - name: Generate Equicord plugin list
-              run: pnpm generateEquicordPluginJson dist/equicordplugins.json
+            - name: Generate plugin lists
+              run: |
+                pnpm generatePluginJson dist/plugins.json
+                pnpm generateEquicordPluginJson dist/equicordplugins.json
+                pnpm generateVencordPluginJson dist/vencordplugins.json
+                pnpm generateDevsList dist/devs.json
 
             - name: Collect files to be released
               run: |
@@ -56,36 +56,21 @@ jobs:
                   cp *.{json,zip,asar} release
 
                   # legacy un-asared files
-                  # FIXME: remove at some point
                   cp desktop/* release
-                  for file in vesktop/*; do
-                    filename=$(basename "$file")
-                    cp "$file" "release/vencordDesktop${filename^}"
-                  done
                   for file in equibop/*; do
                     filename=$(basename "$file")
-                    cp "$file" "release/equicordDesktop${filename^}"
+                    cp "$file" "release/equibop${filename^}"
                   done
 
                   find release -size 0 -delete
                   rm release/package.json
                   rm release/*.map
 
-            - name: get-npm-version
-              id: package-version
-              uses: martinbeentjes/npm-get-version-action@v1.3.1
-
-            - name: Upload Equicord Tagged
-              if: startsWith(github.ref, 'refs/tags/')
-              run: |
-                  gh release upload v${{ steps.package-version.outputs.current-version}} --clobber dist/release/*
-
             - name: Upload Equicord Stable
-              if: ${{ github.ref_name == 'main' }}
               run: |
                   gh release upload latest --clobber dist/release/*
 
-            - name: Upload Plugins JSON to Equibored repo
+            - name: Upload Plugin JSONs to Equibored repo
               run: |
                   git config --global user.name "GitHub-Actions"
                   git config --global user.email actions@github.com

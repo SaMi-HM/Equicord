@@ -6,8 +6,8 @@
 
 import { EquicordDevs } from "@utils/constants";
 import definePlugin from "@utils/types";
+import { User } from "@vencord/discord-types";
 import { UserStore } from "@webpack/common";
-import { User } from "discord-types/general";
 
 let user: ModifiedUser | undefined;
 let lastUserId: string | undefined;
@@ -39,11 +39,13 @@ export default definePlugin({
     authors: [EquicordDevs.thororen],
     patches: [
         {
-            find: "ProductCatalog",
-            replacement: {
-                match: /\i\.warn\("Cannot find the corresponding SKU to the user's premium type "\.concat\(\i\.premiumType\)\),/,
-                replace: ""
-            }
+            find: "#{intl::USER_PROFILE_ENTRY_POINTS_AMP_UP_YOUR_PROFILE}",
+            replacement: [
+                {
+                    match: /}\);return \i\?.*?}\)}}/,
+                    replace: "});return null}}"
+                }
+            ],
         }
     ],
     start() {

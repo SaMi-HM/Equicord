@@ -9,7 +9,7 @@ import "./styles.css";
 import { definePluginSettings } from "@api/Settings";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
-import { FluxDispatcher, ReactDOM, useEffect, useState } from "@webpack/common";
+import { createRoot, FluxDispatcher, useEffect, useState } from "@webpack/common";
 import { Root } from "react-dom/client";
 
 let jumpscareRoot: Root | undefined;
@@ -18,12 +18,12 @@ const settings = definePluginSettings({
     imageSource: {
         type: OptionType.STRING,
         description: "Sets the image url of the jumpscare",
-        default: "https://github.com/Equicord/Equibored/blob/main/misc/troll.gif?raw=true"
+        default: "https://github.com/Equicord/Equibored/blob/main/icons/jumpscare/troll.gif?raw=true"
     },
     audioSource: {
         type: OptionType.STRING,
         description: "Sets the audio url of the jumpscare",
-        default: "https://github.com/Equicord/Equibored/raw/main/misc/trollolol.mp3?raw=true"
+        default: "https://github.com/Equicord/Equibored/raw/main/sounds/jumpscare/trollolol.mp3?raw=true"
     },
     chance: {
         type: OptionType.NUMBER,
@@ -38,7 +38,7 @@ function getJumpscareRoot(): Root {
         element.id = "jumpscare-root";
         element.classList.add("jumpscare-root");
         document.body.append(element);
-        jumpscareRoot = ReactDOM.createRoot(element);
+        jumpscareRoot = createRoot(element);
     }
 
     return jumpscareRoot;

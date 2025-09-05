@@ -12,8 +12,8 @@ import { InfoIcon } from "@components/Icons";
 import { Devs } from "@utils/constants";
 import { getCurrentChannel, getCurrentGuild } from "@utils/discord";
 import definePlugin from "@utils/types";
-import { Forms, GuildMemberStore, GuildStore, Menu, Parser } from "@webpack/common";
-import { GuildMember } from "discord-types/general";
+import { GuildMember } from "@vencord/discord-types";
+import { Forms, GuildMemberStore, GuildRoleStore, Menu, Parser } from "@webpack/common";
 
 import { showInRoleModal } from "./RoleMembersModal";
 
@@ -82,7 +82,33 @@ export default definePlugin({
             const channel = getCurrentChannel();
             if (!channel) return;
 
-            const role = GuildStore.getRole(guild.id, id);
+            const role = GuildRoleStore.getRole(guild.id, id);
+            if (!role) return;
+
+            children.push(
+                <Menu.MenuItem
+                    id="vc-view-inrole"
+                    label="View Members in Role"
+                    action={() => {
+                        showInRoleModal(getMembersInRole(role.id, guild.id), role.id, channel.id);
+                    }}
+                    icon={InfoIcon}
+                />
+            );
+        },
+        "message"(children, { message }: { message: any; }) {
+            const guild = getCurrentGuild();
+            if (!guild) return;
+
+            const roleMentions = message.content.match(/<@&(\d+)>/g);
+            if (!roleMentions?.length) return;
+
+            const channel = getCurrentChannel();
+            if (!channel) return;
+
+            const roleIds = roleMentions.map(mention => mention.match(/<@&(\d+)>/)![1]);
+
+            const role = GuildRoleStore.getRole(guild.id, roleIds);
             if (!role) return;
 
             children.push(

@@ -4,13 +4,11 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { addPreSendListener, removePreSendListener } from "@api/MessageEvents";
-import { migratePluginSettings } from "@api/Settings";
+import { addMessagePreSendListener, removeMessagePreSendListener } from "@api/MessageEvents";
 import { Devs } from "@utils/constants";
 import definePlugin from "@utils/types";
 import { ChannelStore, GuildMemberStore, SelectedChannelStore, SelectedGuildStore } from "@webpack/common";
 
-migratePluginSettings("AtSomeone", "atSomeone");
 export default definePlugin({
     name: "AtSomeone",
     authors: [Devs.Joona],
@@ -28,19 +26,19 @@ export default definePlugin({
         {
             find: "inQuote:",
             replacement: {
-                match: /\|Clyde/,
+                match: /\|here/,
                 replace: "$&|someone"
             }
         }
     ],
     start() {
-        this.preSend = addPreSendListener((_, msg) => {
+        this.preSend = addMessagePreSendListener((_, msg) => {
             msg.content = msg.content.replace(/@someone/g, () => `<@${randomUser()}>`);
         });
     },
 
     stop() {
-        removePreSendListener(this.preSend);
+        removeMessagePreSendListener(this.preSend);
     }
 });
 

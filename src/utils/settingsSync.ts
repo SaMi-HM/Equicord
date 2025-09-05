@@ -16,12 +16,13 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import { DataStore } from "@api/index";
 import { showNotification } from "@api/Notifications";
 import { PlainSettings, Settings } from "@api/Settings";
-import { moment, Toasts } from "@webpack/common";
+import { moment, SettingsRouter, Toasts } from "@webpack/common";
 import { deflateSync, inflateSync } from "fflate";
 
-import { getCloudAuth, getCloudUrl } from "./cloud";
+import { checkCloudUrlCsp, getCloudAuth, getCloudUrl } from "./cloud";
 import { Logger } from "./Logger";
 import { relaunch } from "./native";
 import { chooseFile, saveFile } from "./web";
@@ -38,14 +39,16 @@ export async function importSettings(data: string) {
         Object.assign(PlainSettings, parsed.settings);
         await VencordNative.settings.set(parsed.settings);
         await VencordNative.quickCss.set(parsed.quickCss);
+        if (parsed.dataStore) await DataStore.setMany(parsed.dataStore);
     } else
-        throw new Error("Invalid Settings. Is this even a Equicord Settings file?");
+        throw new Error("Invalid Settings. Is this even an Equicord Settings file?");
 }
 
 export async function exportSettings({ minify }: { minify?: boolean; } = {}) {
     const settings = VencordNative.settings.get();
     const quickCss = await VencordNative.quickCss.get();
-    return JSON.stringify({ settings, quickCss }, null, minify ? undefined : 4);
+    const dataStore = await DataStore.entries();
+    return JSON.stringify({ settings, quickCss, dataStore }, null, minify ? undefined : 4);
 }
 
 export async function downloadSettingsBackup() {
@@ -60,7 +63,7 @@ export async function downloadSettingsBackup() {
     }
 }
 
-const toast = (type: number, message: string) =>
+const toast = (type: string, message: string) =>
     Toasts.show({
         type,
         message,
@@ -115,6 +118,8 @@ const cloudSettingsLogger = new Logger("Cloud:Settings", "#39b7e0");
 export async function putCloudSettings(manual?: boolean) {
     const settings = await exportSettings({ minify: true });
 
+    if (!await checkCloudUrlCsp()) return;
+
     try {
         const res = await fetch(new URL("/v1/settings", getCloudUrl()), {
             method: "PUT",
@@ -159,6 +164,8 @@ export async function putCloudSettings(manual?: boolean) {
 }
 
 export async function getCloudSettings(shouldNotify = true, force = false) {
+    if (!await checkCloudUrlCsp()) return;
+
     try {
         const res = await fetch(new URL("/v1/settings", getCloudUrl()), {
             method: "GET",
@@ -168,6 +175,19 @@ export async function getCloudSettings(shouldNotify = true, force = false) {
                 "If-None-Match": Settings.cloud.settingsSyncVersion.toString()
             },
         });
+
+        if (res.status === 401) {
+            // User switched to an account that isn't connected to cloud
+            showNotification({
+                title: "Cloud Settings",
+                body: "Cloud sync was disabled because this account isn't connected to the Vencloud App. You can enable it again by connecting this account in Cloud Settings. (note: it will store your preferences separately)",
+                color: "var(--yellow-360)",
+                onClick: () => SettingsRouter.open("VencordCloud")
+            });
+            // Disable cloud sync globally
+            Settings.cloud.authenticated = false;
+            return false;
+        }
 
         if (res.status === 404) {
             cloudSettingsLogger.info("No settings on the cloud");
@@ -248,6 +268,8 @@ export async function getCloudSettings(shouldNotify = true, force = false) {
 }
 
 export async function deleteCloudSettings() {
+    if (!await checkCloudUrlCsp()) return;
+
     try {
         const res = await fetch(new URL("/v1/settings", getCloudUrl()), {
             method: "DELETE",

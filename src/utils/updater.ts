@@ -28,6 +28,11 @@ export let isNewer = false;
 export let updateError: any;
 export let changes: Record<"hash" | "author" | "message", string>[];
 
+
+export function shortGitHash(length = 7) {
+    return gitHash.slice(0, length);
+}
+
 async function Unwrap<T>(p: Promise<IpcRes<T>>) {
     const res = await p;
 
@@ -39,10 +44,15 @@ async function Unwrap<T>(p: Promise<IpcRes<T>>) {
 
 export async function checkForUpdates() {
     changes = await Unwrap(VencordNative.updater.getUpdates());
-    if (changes.some(c => c.hash === gitHash)) {
-        isNewer = true;
-        return (isOutdated = false);
+
+    // we only want to check this for the git updater, not the http updater
+    if (!IS_STANDALONE) {
+        if (changes.some(c => c.hash === gitHash)) {
+            isNewer = true;
+            return (isOutdated = false);
+        }
     }
+
     return (isOutdated = changes.length > 0);
 }
 

@@ -5,12 +5,11 @@
  */
 
 import { type ModalProps, openModal } from "@utils/modal";
+import type { Guild, useToken } from "@vencord/discord-types";
 import { extractAndLoadChunksLazy, findByCodeLazy, findByPropsLazy, findComponentByCodeLazy } from "@webpack";
-import type { useToken } from "@webpack/types";
-import type { Guild } from "discord-types/general";
 import type { ComponentType, FunctionComponent, PropsWithChildren, ReactNode } from "react";
 
-import type { ProfileEffectConfig } from "../lib";
+import type { ProfileEffectConfig } from "../lib/profileEffects";
 
 export * from "./Builder";
 export * from "./BuilderButton";
@@ -40,7 +39,7 @@ export const enum FeatureBorderType {
 }
 
 export const CustomizationSection: ComponentType<CustomizationSectionProps>
-    = findByCodeLazy(".customizationSectionBackground");
+    = findComponentByCodeLazy(".customizationSectionBackground");
 
 export const tokens: {
     unsafe_rawColors: Record<string, Parameters<useToken>[0]>;
@@ -80,7 +79,7 @@ export function setProfileEffectModal(comp: typeof ProfileEffectModal) {
     ProfileEffectModal = comp;
 }
 
-const requireProfileEffectModal = extractAndLoadChunksLazy(["initialSelectedEffectId:", ".openModalLazy"]);
+const requireProfileEffectModal = extractAndLoadChunksLazy([/guild:\i,initialSelectedEffectId:/, /\i\.\i\i\)/]);
 
 export async function openProfileEffectModal(
     initialEffectId: ProfileEffectModalProps["initialSelectedEffectId"],

@@ -17,18 +17,14 @@
 */
 
 import { Settings } from "@api/Settings";
-import BackupAndRestoreTab from "@components/VencordSettings/BackupAndRestoreTab";
-import CloudTab from "@components/VencordSettings/CloudTab";
-import PatchHelperTab from "@components/VencordSettings/PatchHelperTab";
-import PluginsTab from "@components/VencordSettings/PluginsTab";
-import UpdaterTab from "@components/VencordSettings/UpdaterTab";
-import VencordTab from "@components/VencordSettings/VencordTab";
+import { BackupAndRestoreTab, CloudTab, PatchHelperTab, PluginsTab, UpdaterTab, VencordTab } from "@components/settings";
+import ThemesTab from "@components/ThemeSettings/ThemesTab";
 import { Devs } from "@utils/constants";
 import { getIntlMessage } from "@utils/discord";
 import definePlugin, { OptionType } from "@utils/types";
+import { shortGitHash } from "@utils/updater";
 import { React } from "@webpack/common";
 
-import gitHash from "~git-hash";
 
 type SectionType = "HEADER" | "DIVIDER" | "CUSTOM";
 type SectionTypes = Record<SectionType, SectionType>;
@@ -64,7 +60,7 @@ export default definePlugin({
                     replace: (_, sectionTypes, commaOrSemi, elements, element) => `${commaOrSemi} $self.addSettings(${elements}, ${element}, ${sectionTypes}) ${commaOrSemi}`
                 },
                 {
-                    match: /({(?=.+?function (\i).{0,160}(\i)=\i\.useMemo.{0,140}return \i\.useMemo\(\(\)=>\i\(\3).+?function\(\){return )\2(?=})/,
+                    match: /({(?=.+?function (\i).{0,160}(\i)=\i\.useMemo.{0,140}return \i\.useMemo\(\(\)=>\i\(\3).+?\(\)=>)\2/,
                     replace: (_, rest, settingsHook) => `${rest}$self.wrapSettingsHook(${settingsHook})`
                 }
             ]
@@ -90,7 +86,6 @@ export default definePlugin({
             {
                 section: "EquicordSettings",
                 label: "Equicord",
-                searchableTitles: ["Equicord", "Settings", "Equicord Settings"],
                 element: VencordTab,
                 className: "vc-settings"
             },
@@ -105,7 +100,7 @@ export default definePlugin({
                 section: "EquicordThemes",
                 label: "Themes",
                 searchableTitles: ["Themes"],
-                element: require("@components/ThemeSettings/ThemesTab").default,
+                element: ThemesTab,
                 className: "vc-themes"
             },
             !IS_UPDATER_DISABLED && {
@@ -123,13 +118,13 @@ export default definePlugin({
                 className: "vc-cloud"
             },
             {
-                section: "EquicordSettingsSync",
+                section: "settings/tabsSync",
                 label: "Backup & Restore",
                 searchableTitles: ["Backup & Restore"],
                 element: BackupAndRestoreTab,
                 className: "vc-backup-restore"
             },
-            {
+            IS_DEV && {
                 section: "EquicordPatchHelper",
                 label: "Patch Helper",
                 searchableTitles: ["Patch Helper"],
@@ -162,6 +157,9 @@ export default definePlugin({
                 belowNitro: getIntlMessage("APP_SETTINGS"),
                 aboveActivity: getIntlMessage("ACTIVITY_SETTINGS")
             };
+
+            if (!names[settingsLocation] || names[settingsLocation].endsWith("_SETTINGS"))
+                return firstChild === "PREMIUM";
 
             return header === names[settingsLocation];
         } catch {
@@ -215,7 +213,7 @@ export default definePlugin({
     get chromiumVersion() {
         try {
             return VencordNative.native.getVersions().chrome
-                // @ts-ignore Typescript will add userAgentData IMMEDIATELY
+                // @ts-expect-error Typescript will add userAgentData IMMEDIATELY
                 || navigator.userAgentData?.brands?.find(b => b.brand === "Chromium" || b.brand === "Google Chrome")?.version
                 || null;
         } catch {
@@ -224,18 +222,22 @@ export default definePlugin({
         }
     },
 
-    get additionalInfo() {
-        if (IS_DEV) return " (Dev)";
-        if (IS_WEB) return " (Web)";
-        if (IS_VESKTOP) return ` (Vesktop v${VesktopNative.app.getVersion()})`;
-        if (IS_STANDALONE) return " (Standalone)";
-        return "";
+    getVersionInfo(support = true) {
+        let version = "";
+
+        if (IS_DEV) version = "Dev";
+        if (IS_WEB) version = "Web";
+        if (IS_VESKTOP) version = `Vesktop v${VesktopNative.app.getVersion()}`;
+        if (IS_EQUIBOP) version = `Equibop v${VesktopNative.app.getVersion()}`;
+        if (IS_STANDALONE) version = "Standalone";
+
+        return support && version ? ` (${version})` : version;
     },
 
     getInfoRows() {
-        const { electronVersion, chromiumVersion, additionalInfo } = this;
+        const { electronVersion, chromiumVersion, getVersionInfo } = this;
 
-        const rows = [`Equicord ${gitHash}${additionalInfo}`];
+        const rows = [`Equicord ${shortGitHash()}${getVersionInfo()}`];
 
         if (electronVersion) rows.push(`Electron ${electronVersion}`);
         if (chromiumVersion) rows.push(`Chromium ${chromiumVersion}`);

@@ -6,6 +6,7 @@
 
 import { popNotice, showNotice } from "@api/Notices";
 import ErrorBoundary from "@components/ErrorBoundary";
+import { getIntlMessageFromHash } from "@utils/discord";
 import { canonicalizeMatch, canonicalizeReplace } from "@utils/patches";
 import { filters, findAll, search, wreq } from "@webpack";
 import { React, Toasts, useState } from "@webpack/common";
@@ -14,8 +15,9 @@ import { reporterData } from "debug/reporterData";
 import { Settings } from "Vencord";
 
 import { logger, PORT, settings } from ".";
-import { Recieve, Send } from "./types";
-import { extractModule, extractOrThrow, findModuleId, mkRegexFind, parseNode, toggleEnabled, } from "./util";
+import { Recieve } from "./types";
+import { FullOutgoingMessage, OutgoingMessage } from "./types/send";
+import { extractModule, extractOrThrow, findModuleId, getModulePatchedBy, mkRegexFind, parseNode, toggleEnabled, } from "./util";
 
 export function stopWs() {
     socket?.close(1000, "Plugin Stopped");
@@ -27,9 +29,9 @@ export let socket: WebSocket | undefined;
 export function initWs(isManual = false) {
     let wasConnected = isManual;
     let hasErrored = false;
-    const ws = socket = new WebSocket(`ws://localhost:${PORT}`);
+    const ws = socket = new WebSocket(`ws://127.0.0.1:${PORT}`);
 
-    function replyData(data: Send.OutgoingMessage) {
+    function replyData(data: OutgoingMessage) {
         ws.send(JSON.stringify(data));
     }
 
@@ -122,21 +124,21 @@ export function initWs(isManual = false) {
          * @param error the error to reply with. if there is no error, the reply is a sucess
          */
         function reply(error?: string) {
-            const data = { nonce: d.nonce, ok: !error } as Record<string, unknown>;
-            if (error) data.error = error;
-
-            ws.send(JSON.stringify(data));
+            const toSend = { nonce: d.nonce, ok: !error } as Record<string, unknown>;
+            if (error) toSend.error = error;
+            logger.debug("Replying with:", toSend);
+            ws.send(JSON.stringify(toSend));
         }
-        function replyData(data: Send.OutgoingMessage) {
-            const toSend: Send.FullOutgoingMessage = {
+        function replyData(data: OutgoingMessage) {
+            const toSend: FullOutgoingMessage = {
                 ...data,
                 nonce: d.nonce
             };
-            // data.nonce = d.nonce;
+            logger.debug(`Replying with data: ${toSend}`);
             ws.send(JSON.stringify(toSend));
         }
 
-        logger.info("Received Message:", d.type, "\n", d.data);
+        logger.debug(`Received Message: ${d.type}`, "\n", d.data);
 
         switch (d.type) {
             case "disable": {
@@ -148,6 +150,7 @@ export function initWs(isManual = false) {
             }
             case "rawId": {
                 const m = d.data;
+                logger.warn("Deprecated rawId message received, use extract instead");
                 replyData({
                     type: "rawId",
                     ok: true,
@@ -168,7 +171,8 @@ export function initWs(isManual = false) {
                                 data: {
                                     patched: extractOrThrow(m.idOrSearch),
                                     source: extractModule(m.idOrSearch, false),
-                                    moduleNumber: m.idOrSearch
+                                    moduleNumber: m.idOrSearch,
+                                    patchedBy: getModulePatchedBy(m.idOrSearch, true)
                                 },
                             });
                             break;
@@ -176,7 +180,7 @@ export function initWs(isManual = false) {
                         case "search": {
                             let moduleId: number;
                             if (m.findType === "string")
-                                moduleId = +findModuleId([m.idOrSearch.toString()]);
+                                moduleId = +findModuleId([canonicalizeMatch(m.idOrSearch.toString())]);
                             else
                                 moduleId = +findModuleId(mkRegexFind(m.idOrSearch));
                             const p = extractOrThrow(moduleId);
@@ -188,7 +192,8 @@ export function initWs(isManual = false) {
                                 data: {
                                     patched: p,
                                     source: p2,
-                                    moduleNumber: moduleId
+                                    moduleNumber: moduleId,
+                                    patchedBy: getModulePatchedBy(moduleId, true)
                                 },
                             });
                             break;
@@ -217,8 +222,9 @@ export function initWs(isManual = false) {
                                     type: "extract",
                                     ok: true,
                                     data: {
-                                        module: extractModule(m.idOrSearch),
+                                        module: extractModule(m.idOrSearch, m.usePatched ?? undefined),
                                         moduleNumber: m.idOrSearch,
+                                        patchedBy: getModulePatchedBy(m.idOrSearch, m.usePatched ?? undefined)
                                     },
                                 });
 
@@ -227,7 +233,7 @@ export function initWs(isManual = false) {
                         case "search": {
                             let moduleId;
                             if (m.findType === "string")
-                                moduleId = +findModuleId([m.idOrSearch.toString()]);
+                                moduleId = +findModuleId([canonicalizeMatch(m.idOrSearch.toString())]);
 
                             else
                                 moduleId = +findModuleId(mkRegexFind(m.idOrSearch));
@@ -235,8 +241,9 @@ export function initWs(isManual = false) {
                                 type: "extract",
                                 ok: true,
                                 data: {
-                                    module: extractModule(moduleId),
-                                    moduleNumber: moduleId
+                                    module: extractModule(moduleId, m.usePatched ?? undefined),
+                                    moduleNumber: moduleId,
+                                    patchedBy: getModulePatchedBy(moduleId, m.usePatched ?? undefined)
                                 },
                             });
                             break;
@@ -285,7 +292,8 @@ export function initWs(isManual = false) {
                                     data: {
                                         module: foundFind,
                                         find: true,
-                                        moduleNumber: +findModuleId([foundFind])
+                                        moduleNumber: +findModuleId([foundFind]),
+                                        patchedBy: getModulePatchedBy(foundFind)
                                     },
                                 });
                             } catch (err) {
@@ -317,7 +325,7 @@ export function initWs(isManual = false) {
                     return reply("Expected exactly one 'find' matches, found " + keys.length);
 
                 const mod = candidates[keys[0]];
-                let src = String(mod.original ?? mod).replaceAll("\n", "");
+                let src = String(mod).replaceAll("\n", "");
 
                 if (src.startsWith("function(")) {
                     src = "0," + src;
@@ -330,7 +338,7 @@ export function initWs(isManual = false) {
 
                     try {
                         const matcher = canonicalizeMatch(parseNode(match));
-                        const replacement = canonicalizeReplace(parseNode(replace), "PlaceHolderPluginName");
+                        const replacement = canonicalizeReplace(parseNode(replace), 'Vencord.Plugins.plugins["PlaceHolderPluginName"]');
 
                         const newSource = src.replace(matcher, replacement as string);
 
@@ -430,8 +438,20 @@ export function initWs(isManual = false) {
                     });
                 break;
             }
+            case "i18n": {
+                const { hashedKey } = d.data;
+                replyData({
+                    type: "i18n",
+                    ok: true,
+                    data: {
+                        value: getIntlMessageFromHash(hashedKey)
+                    }
+                });
+                break;
+            }
             default:
-                reply("Unknown Type " + (d as any).type);
+                // @ts-expect-error should be never
+                reply("Unknown Type " + d?.type);
                 break;
         }
     });
@@ -445,7 +465,6 @@ interface AllModulesNotiProps {
 const AllModulesNoti = ErrorBoundary.wrap(function ({ done, close }: AllModulesNotiProps) {
     const [state, setState] = useState<0 | 1 | -1>(0);
     done.then(setState.bind(null, 1)).catch(setState.bind(null, -1));
-    console.log("test");
     if (state === 1) setTimeout(close, 5000);
     return (<>
         {state === 0 && "Loading lazy modules, restarting could lead to errors"}

@@ -35,7 +35,7 @@ interface SearchBarComponentProps {
 }
 
 type TSearchBarComponent =
-    React.FC<SearchBarComponentProps> & { Sizes: Record<"SMALL" | "MEDIUM" | "LARGE", string>; };
+    React.FC<SearchBarComponentProps>;
 
 interface Gif {
     format: number;
@@ -118,7 +118,7 @@ export default definePlugin({
     renderSearchBar(instance: Instance, SearchBarComponent: TSearchBarComponent) {
         this.instance = instance;
         return (
-            <ErrorBoundary noop={true}>
+            <ErrorBoundary noop>
                 <SearchBar instance={instance} SearchBarComponent={SearchBarComponent} />
             </ErrorBoundary>
         );
@@ -182,7 +182,7 @@ function SearchBar({ instance, SearchBarComponent }: { instance: Instance; Searc
             ref={ref}
             autoFocus={true}
             className={containerClasses.searchBar}
-            size={SearchBarComponent.Sizes.MEDIUM}
+            size="md"
             onChange={onChange}
             onClear={() => {
                 setQuery("");
@@ -212,8 +212,6 @@ export function getTargetString(urlStr: string) {
             return url.href;
         case "path":
             if (url.host === "media.discordapp.net" || url.host === "tenor.com")
-                // /attachments/899763415290097664/1095711736461537381/attachment-1.gif -> attachment-1.gif
-                // /view/some-gif-hi-24248063 -> some-gif-hi-24248063
                 return url.pathname.split("/").at(-1) ?? url.pathname;
             return url.pathname;
         case "hostandpath":

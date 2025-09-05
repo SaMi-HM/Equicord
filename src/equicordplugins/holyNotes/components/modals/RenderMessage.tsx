@@ -4,14 +4,16 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { makeDummyUser } from "@components/settings/tabs/plugins/PluginModal";
+import { MessageType } from "@equicordplugins/holyNotes";
+import { copyToClipboard } from "@utils/clipboard";
 import { classes } from "@utils/misc";
 import { ModalProps } from "@utils/modal";
-import { findByCode, findByCodeLazy, findByProps, findComponentByCodeLazy } from "@webpack";
-import { Clipboard, ContextMenuApi, FluxDispatcher, Menu, NavigationRouter, React } from "@webpack/common";
+import { findByCodeLazy, findByProps, findComponentByCodeLazy } from "@webpack";
+import { ContextMenuApi, FluxDispatcher, Menu, NavigationRouter, React } from "@webpack/common";
 
 import noteHandler from "../../NoteHandler";
 import { HolyNotes } from "../../types";
-
 
 export const RenderMessage = ({
     note,
@@ -26,11 +28,9 @@ export const RenderMessage = ({
     fromDeleteModal: boolean;
     closeModal?: () => void;
 }) => {
-    const ChannelMessage = findComponentByCodeLazy("Message must not be a thread");
     const { message, groupStart, cozyMessage } = findByProps("cozyMessage");
-    const User = findByCode("isClyde(){");
-    const Message = findByCode("isEdited(){");
-    const Channel = findByCodeLazy("computeLurkerPermissionsAllowList");
+    const Channel = findByCodeLazy("computeLurkerPermissionsAllowList(){");
+    const ChannelMessage = findComponentByCodeLazy("Message must not be a thread");
 
     const [isHoldingDelete, setHoldingDelete] = React.useState(false);
 
@@ -89,11 +89,11 @@ export const RenderMessage = ({
                 // @ts-ignore
                 channel={new Channel({ id: "holy-notes" })}
                 message={
-                    new Message(
+                    new MessageType(
                         Object.assign(
                             { ...note },
                             {
-                                author: new User({ ...note?.author }),
+                                author: makeDummyUser(note?.author),
                                 timestamp: new Date(note?.timestamp),
                                 // @ts-ignore
                                 embeds: note?.embeds?.map((embed: { timestamp: string | number | Date; }) =>
@@ -139,13 +139,13 @@ const NoteContextMenu = (
             <Menu.MenuItem
                 label="Copy Text"
                 id="copy-text"
-                action={() => Clipboard.copy(note.content)}
+                action={() => copyToClipboard(note.content)}
             />
             {note?.attachments.length ? (
                 <Menu.MenuItem
                     label="Copy Attachment URL"
                     id="copy-url"
-                    action={() => Clipboard.copy(note.attachments[0].url)}
+                    action={() => copyToClipboard(note.attachments[0].url)}
                 />) : null}
             <Menu.MenuItem
                 color="danger"
@@ -181,7 +181,7 @@ const NoteContextMenu = (
             <Menu.MenuItem
                 label="Copy ID"
                 id="copy-id"
-                action={() => Clipboard.copy(note.id)}
+                action={() => copyToClipboard(note.id)}
             />
         </Menu.Menu>
     );

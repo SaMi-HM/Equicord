@@ -7,9 +7,8 @@
 import "./style.css";
 
 import { definePluginSettings } from "@api/Settings";
-import { makeRange } from "@components/PluginSettings/components";
 import { Devs } from "@utils/constants";
-import definePlugin, { OptionType } from "@utils/types";
+import definePlugin, { makeRange, OptionType } from "@utils/types";
 
 export const settings = definePluginSettings({
     frequentEmojis: {
@@ -103,7 +102,4 @@ export default definePlugin({
             setScrollHook(Math.max(0, Math.min(newValue, emojisLength - this.getMaxQuickReactions())));
         };
     },
-    AddReactionsButton() {
-
-    }
 });

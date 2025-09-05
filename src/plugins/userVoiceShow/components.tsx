@@ -7,9 +7,9 @@
 import { classNameFactory } from "@api/Styles";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { classes } from "@utils/misc";
-import { filters, findByCodeLazy, findByPropsLazy, findComponentByCodeLazy, findStoreLazy, mapMangledModuleLazy } from "@webpack";
-import { ChannelRouter, ChannelStore, GuildStore, IconUtils, match, P, PermissionsBits, PermissionStore, React, showToast, Text, Toasts, Tooltip, useMemo, UserStore, useStateFromStores } from "@webpack/common";
-import { Channel } from "discord-types/general";
+import { Channel } from "@vencord/discord-types";
+import { filters, findByCodeLazy, findByPropsLazy, findComponentByCodeLazy, mapMangledModuleLazy } from "@webpack";
+import { ChannelRouter, ChannelStore, GuildStore, IconUtils, match, P, PermissionsBits, PermissionStore, React, showToast, Text, Toasts, Tooltip, useMemo, UserStore, UserSummaryItem, useStateFromStores, VoiceStateStore } from "@webpack/common";
 
 const cl = classNameFactory("vc-uvs-");
 
@@ -18,16 +18,15 @@ const { useChannelName } = mapMangledModuleLazy("#{intl::GROUP_DM_ALONE}", {
     useChannelName: filters.byCode("()=>null==")
 });
 const getDMChannelIcon = findByCodeLazy(".getChannelIconURL({");
-const VoiceStateStore = findStoreLazy("VoiceStateStore");
 
-const UserSummaryItem = findComponentByCodeLazy("defaultRenderUser", "showDefaultAvatarsForNullUsers");
 const Avatar = findComponentByCodeLazy(".status)/2):0");
-const GroupDMAvatars = findComponentByCodeLazy(".AvatarSizeSpecs[", "getAvatarURL");
+const GroupDMAvatars = findComponentByCodeLazy("frontSrc:", "getAvatarURL");
 
 const ActionButtonClasses = findByPropsLazy("actionButton", "highlight");
 
 interface IconProps extends React.ComponentPropsWithoutRef<"div"> {
     size?: number;
+    iconClassName?: string;
 }
 
 function SpeakerIcon(props: IconProps) {
@@ -40,6 +39,7 @@ function SpeakerIcon(props: IconProps) {
             className={classes(cl("speaker"), props.onClick != null ? cl("clickable") : undefined, props.className)}
         >
             <svg
+                className={props.iconClassName}
                 width={props.size}
                 height={props.size}
                 viewBox="0 0 24 24"
@@ -111,9 +111,37 @@ function VoiceChannelTooltip({ channel, isLocked }: VoiceChannelTooltipProps) {
                     <Text variant="text-sm/bold">{guild.name}</Text>
                 </div>
             )}
-            <div className={cl("name")}>
+            <div className={cl("name2")} style={{ display: "flex", alignItems: "center" }}>
                 {channelIcon}
-                <Text variant="text-sm/semibold">{channelName}</Text>
+                <Text variant="text-sm/semibold">
+                    {channelName}
+                </Text>
+                <div style={{ display: "flex", alignItems: "center", marginLeft: "10px" }}>
+                    <Text
+                        style={{
+                            color: "gray",
+                            fontSize: "12px",
+                            boxSizing: "border-box",
+                            padding: "0 6px 0 0",
+                            backgroundColor: "var(--background-tertiary)",
+                            borderRadius: "0 8px 0 0",
+                        }}
+                    >
+                        {users.length < 10 ? `0${users.length}` : `${users.length}`}
+                    </Text>
+                    <Text
+                        style={{
+                            color: "gray",
+                            fontSize: "12px",
+                            boxSizing: "border-box",
+                            padding: "0 6px 0 0",
+                            backgroundColor: "var(--background-mod-strong)",
+                            borderRadius: "0 8px 0 0",
+                        }}
+                    >
+                        {channel.userLimit < 10 ? `0${channel.userLimit}` : `${channel.userLimit}`}
+                    </Text>
+                </div>
             </div>
             <div className={cl("vc-members")}>
                 {isLocked ? <LockedSpeakerIcon size={18} /> : <SpeakerIcon size={18} />}
@@ -128,17 +156,17 @@ function VoiceChannelTooltip({ channel, isLocked }: VoiceChannelTooltipProps) {
     );
 }
 
-interface VoiceChannelIndicatorProps {
+export type VoiceChannelIndicatorProps = {
     userId: string;
     isMessageIndicator?: boolean;
     isProfile?: boolean;
     isActionButton?: boolean;
     shouldHighlight?: boolean;
-}
+};
 
 const clickTimers = {} as Record<string, any>;
 
-export const VoiceChannelIndicator = ErrorBoundary.wrap(({ userId, isMessageIndicator, isProfile, isActionButton, shouldHighlight }: VoiceChannelIndicatorProps) => {
+export const VoiceChannelIndicator = ErrorBoundary.wrap(({ userId, isProfile, isActionButton, shouldHighlight }: VoiceChannelIndicatorProps) => {
     const channelId = useStateFromStores([VoiceStateStore], () => VoiceStateStore.getVoiceStateForUser(userId)?.channelId as string | undefined);
 
     const channel = channelId == null ? undefined : ChannelStore.getChannel(channelId);
@@ -182,16 +210,15 @@ export const VoiceChannelIndicator = ErrorBoundary.wrap(({ userId, isMessageIndi
             {props => {
                 const iconProps: IconProps = {
                     ...props,
-                    className: classes(isMessageIndicator && cl("message-indicator"), (!isProfile && !isActionButton) && cl("speaker-margin"), isActionButton && ActionButtonClasses.actionButton, shouldHighlight && ActionButtonClasses.highlight),
-                    size: isActionButton ? 20 : undefined,
+                    className: classes(isActionButton && ActionButtonClasses.actionButton, isActionButton && shouldHighlight && ActionButtonClasses.highlight),
+                    iconClassName: classes(isProfile && cl("profile-speaker")),
+                    size: isActionButton ? 20 : 16,
                     onClick
                 };
 
-                return <div className={isMessageIndicator ? cl("message-indicator") : undefined}>
-                    {isLocked ?
-                        <LockedSpeakerIcon {...iconProps} />
-                        : <SpeakerIcon {...iconProps} />}
-                </div>;
+                return isLocked ?
+                    <LockedSpeakerIcon {...iconProps} />
+                    : <SpeakerIcon {...iconProps} />;
             }}
         </Tooltip>
     );

@@ -102,16 +102,16 @@ export default definePlugin({
             find: "#{intl::EMOJI_PICKER_CREATE_EMOJI_TITLE}),size:",
             replacement: {
                 match: /(\i)=\i\|\|!\i&&\i.\i.isEmojiCategoryNitroLocked\(\{[^}]*\}\);/,
-                replace: "$&$1||"
+                replace: "$&$1=($1 && $1.isNitroLocked && !$1.isUserAccess);"
             },
             predicate: () => settings.store.emojiList,
         },
         {
             // Emoji category list
-            find: "#{intl::EMOJI_CATEGORY_TOP_GUILD_EMOJI}",
+            find: "#{intl::EMOJI_CATEGORY_TOP_GUILD_EMOJI},{guildName:",
             replacement: {
                 match: /(?<=(\i)\.unshift\((\i)\):)(?=\1\.push\(\2\))/,
-                replace: "$2.isNitroLocked||"
+                replace: "$2.isNitroLocked && !$2.isUserAccess ||"
             },
             predicate: () => settings.store.emojiList,
         }

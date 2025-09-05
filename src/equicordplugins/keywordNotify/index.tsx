@@ -16,9 +16,9 @@ import { Margins } from "@utils/margins";
 import { classes } from "@utils/misc";
 import { useForceUpdater } from "@utils/react";
 import definePlugin, { OptionType } from "@utils/types";
+import { Message, User } from "@vencord/discord-types";
 import { findByCodeLazy, findByPropsLazy } from "@webpack";
 import { Button, ChannelStore, FluxDispatcher, Forms, Select, SelectedChannelStore, Switch, TabBar, TextInput, Tooltip, UserStore, useState } from "@webpack/common";
-import { Message, User } from "discord-types/general/index.js";
 import type { JSX, PropsWithChildren } from "react";
 
 type IconProps = JSX.IntrinsicElements["svg"];
@@ -33,7 +33,7 @@ const recentMentionsPopoutClass = findByPropsLazy("recentMentionsPopout");
 const tabClass = findByPropsLazy("inboxTitle", "tab");
 const buttonClass = findByPropsLazy("size36");
 const MenuHeader = findByCodeLazy(".getUnseenInviteCount())");
-const Popout = findByCodeLazy("#{intl::UNBLOCK_TO_JUMP_TITLE}", "canCloseAllMessages:");
+const Popout = findByCodeLazy("getProTip", "canCloseAllMessages:");
 const createMessageRecord = findByCodeLazy(".createFromServer(", ".isBlockedForMessage", "messageReference:");
 const KEYWORD_ENTRIES_KEY = "KeywordNotify_keywordEntries";
 const KEYWORD_LOG_KEY = "KeywordNotify_log";
@@ -313,33 +313,32 @@ export default definePlugin({
     settings,
     patches: [
         {
-            find: "#{intl::UNREADS_TAB_LABEL}",
+            find: "#{intl::UNREADS_TAB_LABEL})}",
             replacement: {
-                match: /\i\?\(0,\i\.jsxs\)\(\i\.TabBar\.Item/,
-                replace: "$self.keywordTabBar(),$&"
+                match: /,(\i\?\(0,\i\.jsxs\)\(\i\.\i\i\.Item)/,
+                replace: ",$self.keywordTabBar()$&"
             }
         },
         {
             find: "location:\"RecentsPopout\"});",
             replacement: {
-                match: /:(\i)===\i\.\i\.MENTIONS\?\(0,.+?setTab:(\i),onJump:(\i),badgeState:\i,closePopout:(\i)/,
-                replace: ": $1 === 8 ? $self.tryKeywordMenu($2, $3, $4) $&"
+                match: /(?<=setTab:(\i),badgeState:\i,closePopout:(\i).{0,50}):(\i)===\i\.\i\.MENTIONS\?\(0,.+?onJump:(\i)/,
+                replace: ": $3 === 8 ? $self.tryKeywordMenu($1, $4, $2) $&"
             }
         },
         {
             find: ".guildFilter:null",
-            replacement: {
-                match: /function (\i)\(\i\){let{message:\i,gotoMessage/,
-                replace: "$self.renderMsg = $1; $&"
-            }
+            replacement: [
+                {
+                    match: /function (\i)\(\i\){let{message:\i,gotoMessage/,
+                    replace: "$self.renderMsg = $1; $&"
+                },
+                {
+                    match: /onClick:\(\)=>(\i\.\i\.deleteRecentMention\((\i)\.id\))/,
+                    replace: "onClick: () => $2._keyword ? $self.deleteKeyword($2.id) : $1"
+                }
+            ]
         },
-        {
-            find: ".guildFilter:null",
-            replacement: {
-                match: /onClick:\(\)=>(\i\.\i\.deleteRecentMention\((\i)\.id\))/,
-                replace: "onClick: () => $2._keyword ? $self.deleteKeyword($2.id) : $1"
-            }
-        }
     ],
 
     async start() {

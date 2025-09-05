@@ -8,7 +8,7 @@
 import { ReporterData as IReporterData } from "debug/reporterData";
 export type ReporterData = IReporterData;
 
-export type OutgoingMessage = (Report | DiffModule | ExtractModule | ModuleList | RawId) & Base;
+export type OutgoingMessage = (Report | DiffModule | ExtractModule | ModuleList | RawId | I18nValue) & Base;
 export type FullOutgoingMessage = OutgoingMessage & Nonce;
 
 export type Base = {
@@ -23,9 +23,24 @@ export type Nonce = {
 };
 export type ModuleResult = {
     moduleNumber: number;
+    /**
+     * a list of plugins that patched this module, if it was patched, otherwise an empty array
+     *
+     * if the module was patched, but the returned module is the original, they array will still be empty
+     *
+     * if {@link ExtractModule.data|ExtractModule.data.find} is true, this will be a list of what patched the entire module (not just the part that was found)
+     */
+    patchedBy: string[];
 };
 
 // #region valid payloads
+export type I18nValue = {
+    type: "i18n";
+    data: {
+        value: string;
+    };
+};
+
 export type Report = {
     type: "report";
     data: ReporterData;
@@ -56,7 +71,13 @@ export type ModuleList = {
         modules: string[];
     };
 };
+/**
+ * @deprecated use extractModule with usePatched instead
+ */
 export type RawId = {
+    /**
+     * @deprecated use extractModule with usePatched instead
+     */
     type: "rawId";
     data: string;
 };

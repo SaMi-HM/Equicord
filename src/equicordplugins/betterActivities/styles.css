@@ -19,12 +19,8 @@
     border-radius: 50%;
 }
 
-[class*="tooltip_"]:has(.vc-bactivities-activity-tooltip) {
-    max-width: 280px;
-}
-
 .vc-bactivities-activity-tooltip {
-    margin: -5px;
+    padding: 1px;
 }
 
 .vc-bactivities-caret-left,
@@ -45,7 +41,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 5px;
-    background: var(--background-secondary-alt);
+    background: var(--background-base-lower-alt);
     border-radius: 3px;
     flex: 1 0;
     margin-top: 10px;
@@ -66,7 +62,7 @@
 }
 
 .vc-bactivities-controls [class^="vc-activities-caret-"]:hover:not(.disabled) {
-    background: var(--background-modifier-accent);
+    background: var(--input-border);
 }
 
 .vc-bactivities-controls .carousel {

@@ -9,19 +9,34 @@ import { definePluginSettings } from "@api/Settings";
 import { disableStyle, enableStyle } from "@api/Styles";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType, Plugin } from "@utils/types";
+import { User } from "@vencord/discord-types";
 import { findStoreLazy } from "@webpack";
-import { User } from "discord-types/general";
 
-import style from "./index.css?managed";
+import style from "./style.css?managed";
 
 interface iUSRBG extends Plugin {
     userHasBackground(userId: string);
     getImageUrl(userId: string): string | null;
 }
 
+interface Nameplate {
+    imgAlt: string;
+    palette: {
+        darkBackground: string;
+        lightBackground: string;
+        name: string;
+    };
+    src: string;
+}
+
 const settings = definePluginSettings({
     animate: {
         description: "Animate banners",
+        type: OptionType.BOOLEAN,
+        default: false
+    },
+    preferNameplate: {
+        description: "prefer nameplate over banner",
         type: OptionType.BOOLEAN,
         default: false
     },
@@ -40,19 +55,23 @@ export default definePlugin({
     patches: [
         {
             find: "#{intl::GUILD_OWNER}),",
-            replacement:
-            {
-                // We add the banner as a property while we can still access the user id
-                match: /verified:(\i).isVerifiedBot.*?name:null.*?(?=avatar:)/,
-                replace: "$&banner:$self.memberListBannerHook($1),",
-            },
+            replacement: [
+                {
+                    // We add the banner as a property while we can still access the user id
+                    match: /user:(\i).{0,150}nameplate:(\i).*?name:null.*?(?=avatar:)/,
+                    replace: "$&banner:$self.memberListBannerHook($1, $2),",
+                },
+                {
+                    match: /(?<=\),nameplate:)(\i)/,
+                    replace: "$self.nameplate($1)"
+                }
+            ]
         },
         {
             find: "role:\"listitem\",innerRef",
-            replacement:
-            {
+            replacement: {
                 // We cant access the user id here, so we take the banner property we set earlier
-                match: /let{avatar:\i.*?focusProps:\i.*?=(\i).*?children:\[/,
+                match: /focusProps.\i\}=(\i).*?children:\[/,
                 replace: "$&$1.banner,"
             }
         }
@@ -70,9 +89,14 @@ export default definePlugin({
         DataStore.set(DATASTORE_KEY, this.data);
     },
 
-    memberListBannerHook(user: User) {
+    nameplate(nameplate: Nameplate | undefined) {
+        if (settings.store.preferNameplate) return nameplate;
+    },
+
+    memberListBannerHook(user: User, nameplate: Nameplate | undefined) {
         let url = this.getBanner(user.id);
         if (!url) return;
+        if (settings.store.preferNameplate && nameplate) return;
         if (!settings.store.animate) {
             // Discord Banners
             url = url.replace(".gif", ".png");
@@ -88,23 +112,11 @@ export default definePlugin({
         }
 
         return (
-            <img id={`vc-banners-everywhere-${user.id}`} src={url} className="vc-banners-everywhere-memberlist"></img>
+            <img alt="" id={`vc-banners-everywhere-${user.id}`} src={url} className="vc-banners-everywhere-memberlist"></img>
         );
     },
 
-    async checkImageExists(url: string): Promise<boolean> {
-        return new Promise(resolve => {
-            const img = new Image();
-            img.onload = () => resolve(true);
-            img.onerror = () => resolve(false);
-            img.src = url;
-        });
-    },
-
     async gifToPng(url: string): Promise<string> {
-        const exists = await this.checkImageExists(url);
-        if (!exists) return "";
-
         return new Promise((resolve, reject) => {
             const img = new Image();
             img.crossOrigin = "anonymous";
@@ -115,13 +127,12 @@ export default definePlugin({
                 const ctx = canvas.getContext("2d");
                 if (ctx) {
                     ctx.drawImage(img, 0, 0);
-                    const pngDataUrl = canvas.toDataURL("image/png");
-                    resolve(pngDataUrl);
+                    resolve(canvas.toDataURL("image/png"));
                 } else {
                     reject(new Error("Failed to get canvas context."));
                 }
             };
-            img.onerror = err => reject(err);
+            img.onerror = () => resolve("");
             img.src = url;
         });
     },

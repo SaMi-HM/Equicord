@@ -1,13 +1,13 @@
 /* stylelint-disable function-url-quotes */
 .vc-more-stickers-icon {
-    fill: #b9bbbe;
+    fill: var(--interactive-normal);
     margin-top: 20%;
 }
 
 .vc-more-stickers-icon:hover,
 .vc-more-stickers-icon:focus-visible,
 .vc-more-stickers-icon-active {
-    fill: #fff;
+    fill: var(--interactive-active);
 }
 
 .vc-more-stickers-picker-container {
@@ -49,7 +49,7 @@
     text-indent: -9999px;
     align-items: center;
     background-color: var(--background-primary);
-    color: var(--text-normal);
+    color: var(--text-default);
     display: flex;
     height: 100%;
     justify-content: center;
@@ -106,7 +106,7 @@
 }
 
 .vc-more-stickers-category-scroller> :last-child {
-    position: "absolute";
+    position: absolute;
     pointer-events: none;
     min-height: 0;
     min-width: 1px;
@@ -116,7 +116,7 @@
 
 .vc-more-stickers-category-scroller,
 .vc-more-stickers-picker-content-scroller {
-    scrollbar-width: thin;
+    scrollbar-width: none;
     scrollbar-color: var(--scrollbar-thin-thumb) var(--scrollbar-thin-track);
 }
 
@@ -258,7 +258,7 @@
     -ms-flex-align: center;
     align-items: center;
     background-color: var(--background-primary);
-    color: var(--text-normal);
+    color: var(--text-default);
     display: flex;
     height: 100%;
     -webkit-box-pack: center;
@@ -355,7 +355,7 @@
     height: 48px;
     width: 100%;
     padding: 0 16px;
-    background-color: var(--background-secondary-alt);
+    background-color: var(--background-base-lower-alt);
     display: flex;
     flex: 0 0 auto;
     flex-direction: row;
@@ -382,7 +382,7 @@
     font-size: 16px;
     line-height: 20px;
     font-weight: 600;
-    color: var(--text-normal);
+    color: var(--text-default);
 }
 
 .vc-more-stickers-picker-content-inspector-title-secondary {
@@ -501,5 +501,5 @@
     font-family: var(--font-primary);
     font-size: 8pt;
     font-weight: 600;
-    color: var(--text-normal);
+    color: var(--text-default);
 }

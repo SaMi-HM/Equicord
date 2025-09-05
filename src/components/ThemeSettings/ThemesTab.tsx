@@ -20,23 +20,25 @@ import "./themesStyles.css";
 
 import { Settings, useSettings } from "@api/Settings";
 import { classNameFactory } from "@api/Styles";
+import { ErrorCard } from "@components/ErrorCard";
 import { Flex } from "@components/Flex";
 import { CogWheel, DeleteIcon, FolderIcon, PaintbrushIcon, PencilIcon, PluginIcon, PlusIcon, RestartIcon } from "@components/Icons";
 import { Link } from "@components/Link";
-import { openPluginModal } from "@components/PluginSettings/PluginModal";
-import { AddonCard } from "@components/VencordSettings/AddonCard";
-import { QuickAction, QuickActionCard } from "@components/VencordSettings/quickActions";
-import { SettingsTab, wrapTab } from "@components/VencordSettings/shared";
-import { isPluginEnabled } from "@plugins";
+import { AddonCard, openPluginModal, QuickAction, QuickActionCard, SettingsTab, wrapTab } from "@components/settings";
+import { OnlineThemeCard } from "@components/settings/OnlineThemeCard";
+import { CspBlockedUrls, useCspErrors } from "@utils/cspViolations";
 import { openInviteModal } from "@utils/discord";
+import { Margins } from "@utils/margins";
+import { classes } from "@utils/misc";
 import { openModal } from "@utils/modal";
-import { showItemInFolder } from "@utils/native";
-import { useAwaiter } from "@utils/react";
+import { relaunch, showItemInFolder } from "@utils/native";
+import { useAwaiter, useForceUpdater } from "@utils/react";
 import type { ThemeHeader } from "@utils/themes";
 import { getThemeInfo, stripBOM, type UserThemeHeader } from "@utils/themes/bd";
 import { usercssParse } from "@utils/themes/usercss";
+import { getStylusWebStoreUrl } from "@utils/web";
 import { findLazy } from "@webpack";
-import { Button, Card, Forms, React, showToast, TabBar, TextInput, Tooltip, useEffect, useMemo, useRef, useState } from "@webpack/common";
+import { Alerts, Button, Card, Forms, React, showToast, TabBar, TextInput, Tooltip, useEffect, useMemo, useRef, useState } from "@webpack/common";
 import type { ComponentType, Ref, SyntheticEvent } from "react";
 import type { UserstyleHeader } from "usercss-meta";
 
@@ -74,7 +76,7 @@ function Validator({ link, onValidate }: { link: string; onValidate: (valid: boo
             : "Valid!";
 
     return <Forms.FormText style={{
-        color: pending ? "var(--text-muted)" : err ? "var(--text-danger)" : "var(--text-positive)"
+        color: pending ? "var(--text-muted)" : err ? "var(--text-danger)" : "var(--status-positive)"
     }}>{text}</Forms.FormText>;
 }
 
@@ -84,6 +86,7 @@ interface OtherThemeCardProps {
     onChange: (enabled: boolean) => void;
     onDelete: () => void;
     showDeleteButton?: boolean;
+    onEditName?: (newName: string) => void;
 }
 
 interface UserCSSCardProps {
@@ -96,7 +99,7 @@ interface UserCSSCardProps {
 
 function UserCSSThemeCard({ theme, enabled, onChange, onDelete, onSettingsReset }: UserCSSCardProps) {
     const missingPlugins = useMemo(() =>
-        theme.requiredPlugins?.filter(p => !isPluginEnabled(p)), [theme]);
+        theme.requiredPlugins?.filter(p => !Vencord.Plugins.isPluginEnabled(p)), [theme]);
 
     return (
         <AddonCard
@@ -147,9 +150,10 @@ function UserCSSThemeCard({ theme, enabled, onChange, onDelete, onSettingsReset 
     );
 }
 
-function OtherThemeCard({ theme, enabled, onChange, onDelete, showDeleteButton }: OtherThemeCardProps) {
+function OtherThemeCard({ theme, enabled, onChange, onDelete, showDeleteButton, onEditName }: OtherThemeCardProps) {
     return (
-        <AddonCard
+        <OnlineThemeCard
+            customName={theme.customName}
             name={theme.name}
             description={theme.description}
             author={theme.author}
@@ -171,7 +175,10 @@ function OtherThemeCard({ theme, enabled, onChange, onDelete, showDeleteButton }
                             href={`https://discord.gg/${theme.invite}`}
                             onClick={async e => {
                                 e.preventDefault();
-                                theme.invite != null && openInviteModal(theme.invite).catch(() => showToast("Invalid or expired invite"));
+                                theme.invite != null &&
+                                    openInviteModal(theme.invite).catch(() =>
+                                        showToast("Invalid or expired invite")
+                                    );
                             }}
                         >
                             Discord Server
@@ -179,6 +186,8 @@ function OtherThemeCard({ theme, enabled, onChange, onDelete, showDeleteButton }
                     )}
                 </Flex>
             }
+
+            onEditName={onEditName}
         />
     );
 }
@@ -197,6 +206,9 @@ function ThemesTab() {
     const [themeLinkValid, setThemeLinkValid] = useState(false);
     const [userThemes, setUserThemes] = useState<ThemeHeader[] | null>(null);
     const [onlineThemes, setOnlineThemes] = useState<(UserThemeHeader & { link: string; })[] | null>(null);
+    const [themeNames, setThemeNames] = useState<Record<string, string>>(() => {
+        return settings.themeNames ?? {};
+    });
     const [themeDir, , themeDirPending] = useAwaiter(VencordNative.themes.getThemesDir);
 
     useEffect(() => {
@@ -411,11 +423,20 @@ function ThemesTab() {
     }
 
     async function refreshOnlineThemes() {
-        const themes = await Promise.all(settings.themeLinks.map(async link => {
-            const css = await fetch(link).then(res => res.text());
-            return { ...getThemeInfo(css, link), link };
-        }));
-        setOnlineThemes(themes);
+        const themes = await Promise.all(
+            settings.themeLinks.map(async link => {
+                try {
+                    const res = await fetch(link);
+                    if (!res.ok) throw new Error(`Failed to fetch ${link}`);
+                    const css = await res.text();
+                    return { ...getThemeInfo(css, link), link };
+                } catch (err) {
+                    console.warn(`Theme fetch failed for ${link}:`, err);
+                    return null;
+                }
+            })
+        );
+        setOnlineThemes(themes.filter(theme => theme !== null));
     }
 
     function onThemeLinkEnabledChange(link: string, enabled: boolean) {
@@ -434,8 +455,14 @@ function ThemesTab() {
     }
 
     function OnlineThemes() {
+
+        const themes = (onlineThemes ?? []).map(theme => ({
+            ...theme,
+            customName: themeNames[theme.link] ?? null,
+        }));
+
         return (
-            <>
+            <>;
                 <Forms.FormSection title="Online Themes" tag="h5">
                     <Card className="vc-settings-theme-add-card">
                         <Forms.FormText>Make sure to use direct links to files (raw or github.io)!</Forms.FormText>
@@ -447,26 +474,36 @@ function ThemesTab() {
                     </Card>
 
                     <div className={cl("grid")}>
-                        {onlineThemes?.map(rawLink => {
+                        {themes.map(theme => {
                             const { label, link } = (() => {
-                                const match = /^@(light|dark) (.*)/.exec(rawLink.link);
-                                if (!match) return { label: rawLink, link: rawLink };
+                                const match = /^@(light|dark) (.*)/.exec(theme.link);
+                                if (!match) return { label: theme, link: theme };
 
                                 const [, mode, link] = match;
                                 return { label: `[${mode} mode only] ${link}`, link };
                             })();
 
-                            return <OtherThemeCard
-                                key={rawLink.fileName}
-                                enabled={settings.enabledThemeLinks.includes(rawLink.link)}
-                                onChange={enabled => onThemeLinkEnabledChange(rawLink.link, enabled)}
-                                onDelete={async () => {
-                                    onThemeLinkEnabledChange(rawLink.link, false);
-                                    deleteThemeLink(rawLink.link);
-                                }}
-                                showDeleteButton
-                                theme={rawLink}
-                            />;
+                            return (
+                                <OtherThemeCard
+                                    key={theme.fileName}
+                                    theme={theme}
+                                    enabled={settings.enabledThemeLinks.includes(theme.link)}
+                                    onChange={enabled => onThemeLinkEnabledChange(theme.link, enabled)}
+                                    onDelete={async () => {
+                                        onThemeLinkEnabledChange(theme.link, false);
+                                        deleteThemeLink(theme.link);
+                                    }}
+                                    showDeleteButton
+                                    onEditName={newName => {
+                                        const updatedNames = { ...themeNames, [theme.link]: newName };
+                                        setThemeNames(updatedNames);
+                                        settings.themeNames = {
+                                            ...settings.themeNames,
+                                            [theme.link]: newName,
+                                        };
+                                    }}
+                                />
+                            );
                         })}
                     </div>
                 </Forms.FormSection>
@@ -497,10 +534,99 @@ function ThemesTab() {
                 </TabBar.Item>
             </TabBar>
 
+            <CspErrorCard />
             {currentTab === ThemeTab.LOCAL && <LocalThemes />}
             {currentTab === ThemeTab.ONLINE && <OnlineThemes />}
         </SettingsTab>
     );
 }
 
-export default wrapTab(ThemesTab, "Themes");
+export function CspErrorCard() {
+    if (IS_WEB) return null;
+
+    const errors = useCspErrors();
+    const forceUpdate = useForceUpdater();
+
+    if (!errors.length) return null;
+
+    const isImgurHtmlDomain = (url: string) => url.startsWith("https://imgur.com/");
+
+    const allowUrl = async (url: string) => {
+        const { origin: baseUrl, host } = new URL(url);
+
+        const result = await VencordNative.csp.requestAddOverride(baseUrl, ["connect-src", "img-src", "style-src", "font-src"], "Vencord Themes");
+        if (result !== "ok") return;
+
+        CspBlockedUrls.forEach(url => {
+            if (new URL(url).host === host) {
+                CspBlockedUrls.delete(url);
+            }
+        });
+
+        forceUpdate();
+
+        Alerts.show({
+            title: "Restart Required",
+            body: "A restart is required to apply this change",
+            confirmText: "Restart now",
+            cancelText: "Later!",
+            onConfirm: relaunch
+        });
+    };
+
+    const hasImgurHtmlDomain = errors.some(isImgurHtmlDomain);
+
+    return (
+        <ErrorCard className="vc-settings-card">
+            <Forms.FormTitle tag="h5">Blocked Resources</Forms.FormTitle>
+            <Forms.FormText>Some images, styles, or fonts were blocked because they come from disallowed domains.</Forms.FormText>
+            <Forms.FormText>It is highly recommended to move them to GitHub or Imgur. But you may also allow domains if you fully trust them.</Forms.FormText>
+            <Forms.FormText>
+                After allowing a domain, you have to fully close (from tray / task manager) and restart {IS_DISCORD_DESKTOP ? "Discord" : IS_EQUIBOP ? "Equibop" : "Vesktop"} to apply the change.
+            </Forms.FormText>
+
+            <Forms.FormTitle tag="h5" className={classes(Margins.top16, Margins.bottom8)}>Blocked URLs</Forms.FormTitle>
+            <div className="vc-settings-csp-list">
+                {errors.map((url, i) => (
+                    <div key={url}>
+                        {i !== 0 && <Forms.FormDivider className={Margins.bottom8} />}
+                        <div className="vc-settings-csp-row">
+                            <Link href={url}>{url}</Link>
+                            <Button color={Button.Colors.PRIMARY} onClick={() => allowUrl(url)} disabled={isImgurHtmlDomain(url)}>
+                                Allow
+                            </Button>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {hasImgurHtmlDomain && (
+                <>
+                    <Forms.FormDivider className={classes(Margins.top8, Margins.bottom16)} />
+                    <Forms.FormText>
+                        Imgur links should be direct links in the form of <code>https://i.imgur.com/...</code>
+                    </Forms.FormText>
+                    <Forms.FormText>To obtain a direct link, right-click the image and select "Copy image address".</Forms.FormText>
+                </>
+            )}
+        </ErrorCard>
+    );
+}
+
+function UserscriptThemesTab() {
+    return (
+        <SettingsTab title="Themes">
+            <Card className="vc-settings-card">
+                <Forms.FormTitle tag="h5">Themes are not supported on the Userscript!</Forms.FormTitle>
+
+                <Forms.FormText>
+                    You can instead install themes with the <Link href={getStylusWebStoreUrl()}>Stylus extension</Link>!
+                </Forms.FormText>
+            </Card>
+        </SettingsTab>
+    );
+}
+
+export default IS_USERSCRIPT
+    ? wrapTab(UserscriptThemesTab, "Themes")
+    : wrapTab(ThemesTab, "Themes");

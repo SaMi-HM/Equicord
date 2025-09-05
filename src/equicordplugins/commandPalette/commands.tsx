@@ -6,11 +6,11 @@
 
 import { showNotification } from "@api/Notifications";
 import { Settings } from "@api/Settings";
+import { copyToClipboard } from "@utils/clipboard";
 import { relaunch, showItemInFolder } from "@utils/native";
-import { checkForUpdates, getRepo } from "@utils/updater";
-import { Clipboard, GuildStore, NavigationRouter, SettingsRouter, Toasts } from "@webpack/common";
+import { checkForUpdates, getRepo, shortGitHash } from "@utils/updater";
+import { GuildStore, NavigationRouter, SettingsRouter, Toasts } from "@webpack/common";
 
-import gitHash from "~git-hash";
 import gitRemote from "~git-remote";
 import Plugins from "~plugins";
 
@@ -89,7 +89,7 @@ export const actions: ButtonAction[] = [
                 const newUrl = url.replace(/(https?:\/\/)?([a-zA-Z0-9-]+)\.([a-zA-Z0-9-]+)/, "https://$2.$3");
                 const res = (await fetch(newUrl));
                 const text = await res.text();
-                Clipboard.copy(text);
+                copyToClipboard(text);
 
                 Toasts.show({
                     message: "Copied response to clipboard!",
@@ -115,7 +115,7 @@ export const actions: ButtonAction[] = [
 
     {
         id: "copyGitInfo", label: "Copy Git Info", callback: async () => {
-            Clipboard.copy(`gitHash: ${gitHash}\ngitRemote: ${gitRemote}`);
+            copyToClipboard(`gitHash: ${shortGitHash()}\ngitRemote: ${gitRemote}`);
 
             Toasts.show({
                 message: "Copied git info to clipboard!",

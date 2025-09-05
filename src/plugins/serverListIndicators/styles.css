@@ -4,7 +4,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-bottom: 8px;
+    margin-bottom: -1px;
 }
 
 #vc-indicators-indicator-items {
@@ -12,11 +12,34 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    background-color: var(--background-primary);
-    height: 48px;
-    width: 48px;
-    border-radius: 100%;
+    box-sizing: border-box;
+    border-radius: 24%;
+    height: var(--guildbar-avatar-size);
+    width: var(--guildbar-avatar-size);
+    background-color: var(--background-mod-subtle);
     transition: border-radius 0.15s ease-out, background-color 0.15s ease-out;
+}
+
+#vc-indicators-indicator-items::before {
+    position: absolute;
+    content: "";
+    display: block;
+    /* stylelint-disable-next-line length-zero-no-unit */
+    width: 0px;
+    /* stylelint-disable-next-line length-zero-no-unit */
+    height: 0px;
+    opacity: 0;
+    border-radius: 0 4px 4px 0;
+    left: -4px;
+    background-color: var(--header-primary);
+    transition: height 0.15s ease-out, width 0.15s ease-out,
+        opacity 0.15s ease-out;
+}
+
+#vc-indicators-indicator-items:hover::before {
+    width: 8px;
+    height: 20px;
+    opacity: 1;
 }
 
 #vc-indicators-compact-indicator-items {
@@ -27,7 +50,6 @@
 }
 
 #vc-indicators-indicator-items:hover {
-    border-radius: 34%;
     background-color: var(--brand-500);
 }
 
@@ -36,21 +58,15 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    gap: 4px;
     font-size: 12px;
     font-weight: 600;
     width: 100%;
-    color: var(--text-normal);
+    color: var(--text-default);
 }
 
 #vc-friendcount-icon,
 #vc-guildcount-icon {
-    padding-right: 2px;
-    width: 14px;
-    height: 14px;
-}
-
-#vc-indicators-compact-container #vc-friendcount-text-compact,
-#vc-indicators-compact-container #vc-guildcount-text-compact {
-    display: block;
-    padding-left: 4px;
+    width: var(--size-14);
+    height: var(--size-14);
 }

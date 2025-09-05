@@ -5,10 +5,11 @@
  */
 
 import { NavContextMenuPatchCallback } from "@api/ContextMenu";
+import { copyToClipboard } from "@utils/clipboard";
 import { Devs, EquicordDevs } from "@utils/constants";
 import definePlugin from "@utils/types";
-import { Clipboard, Menu } from "@webpack/common";
-import type { Channel, User } from "discord-types/general";
+import type { Channel, User } from "@vencord/discord-types";
+import { Menu } from "@webpack/common";
 
 const MentionIcon = () => (
     <svg
@@ -37,7 +38,7 @@ const UserContextMenuPatch: NavContextMenuPatchCallback = (children, { user }: U
         <Menu.MenuItem
             id="vc-copy-user-mention"
             label="Copy User Mention"
-            action={() => Clipboard.copy(`<@${user.id}>`)}
+            action={() => copyToClipboard(`<@${user.id}>`)}
             icon={MentionIcon}
         />
     );

@@ -5,10 +5,10 @@
  */
 
 import { definePluginSettings, Settings } from "@api/Settings";
+import { copyToClipboard } from "@utils/clipboard";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType, StartAt } from "@utils/types";
-import { findComponentByCodeLazy } from "@webpack";
-import { Button, Clipboard, Forms, TextInput, Toasts, useState } from "@webpack/common";
+import { Button, ColorPicker, Forms, TextInput, Toasts, useState } from "@webpack/common";
 
 import { darkenColorHex, generateRandomColorHex, saturateColorHex } from "./generateTheme";
 import { themes } from "./themeDefinitions";
@@ -58,10 +58,7 @@ function copyPreset(name: string) {
     name: "${name}"
 }
     `;
-    if (Clipboard.SUPPORTS_COPY) {
-        Clipboard.copy(template);
-    }
-
+    copyToClipboard(template);
 }
 
 function CopyPresetComponent() {
@@ -87,8 +84,6 @@ function CopyPresetComponent() {
         </>
     );
 }
-
-const ColorPicker = findComponentByCodeLazy("#{intl::USER_SETTINGS_PROFILE_COLOR_SELECT_COLOR}", ".BACKGROUND_PRIMARY)");
 
 export function generateAndApplyProceduralTheme() {
 
@@ -216,7 +211,7 @@ export function ColorPick({ propertyname }: { propertyname: string; }) {
             <ColorPicker
                 color={parseInt(settings.store[propertyname], 16)}
                 onChange={color => {
-                    const hexColor = color.toString(16).padStart(6, "0");
+                    const hexColor = (color ?? 0).toString(16).padStart(6, "0");
                     settings.store[propertyname] = hexColor;
                     injectCSS();
                 }
@@ -229,9 +224,7 @@ export function ColorPick({ propertyname }: { propertyname: string; }) {
 
 
 function copyCSS() {
-    if (Clipboard.SUPPORTS_COPY) {
-        Clipboard.copy(getCSS(parseFontContent()));
-    }
+    copyToClipboard(getCSS(parseFontContent()));
 }
 
 function parseFontContent() {
@@ -371,7 +364,7 @@ function getCSS(fontName) {
             --primary-630: var(--accent);
 
             /*plugin grid square and nitro shop*/
-            --background-secondary-alt: var(--accent);
+            --background-base-lower-alt: var(--accent);
 
             /*modal background, self explanatory*/
             --modal-background: var(--accent);
@@ -428,7 +421,7 @@ function getCSS(fontName) {
             --header-primary: var(--text);
             --header-secondary: var(--text);
             --font-display: var(--text);
-            --text-normal: var(--text);
+            --text-default: var(--text);
             --text-muted: var(--mutedtext);
             --channels-default: var(--mutedtext);
             --interactive-normal: var(--text) !important;
@@ -797,5 +790,5 @@ export default definePlugin({
     },
     startAt: StartAt.DOMContentLoaded,
     // preview thing, kinda low effort but eh
-    settingsAboutComponent: () => <img src="https://files.catbox.moe/j8y2gt.webp" style={{ width: "568px", borderRadius: "30px" }} ></img>
+    settingsAboutComponent: () => <img src="https://cdn.nest.rip/uploads/97fdf6c1-764c-4445-9422-d3d52af7434c.webp" style={{ width: "568px", borderRadius: "30px" }} alt=""></img>
 });

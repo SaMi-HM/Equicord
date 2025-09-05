@@ -10,6 +10,7 @@ equicord_installer
 .DS_Store
 
 yarn.lock
+bun.lock
 package-lock.json
 
 *.log
@@ -20,12 +21,11 @@ lerna-debug.log*
 .pnpm-debug.log*
 *.tsbuildinfo
 
+.modules/
 src/userplugins
 
 ExtensionCache/
-settings/
-
-src/equicordplugins/usrpe
+/settings
 
 # vencord companion module cache
 .modules

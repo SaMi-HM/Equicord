@@ -24,9 +24,9 @@ import { definePluginSettings } from "@api/Settings";
 import { CogWheel } from "@components/Icons";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
+import { Guild } from "@vencord/discord-types";
 import { findByCodeLazy, findByPropsLazy, mapMangledModuleLazy } from "@webpack";
 import { Menu } from "@webpack/common";
-import { Guild } from "discord-types/general";
 
 const { updateGuildNotificationSettings } = findByPropsLazy("updateGuildNotificationSettings");
 const { toggleShowAllChannels } = mapMangledModuleLazy(".onboardExistingMember(", {
@@ -77,6 +77,11 @@ const settings = definePluginSettings({
         description: "Show all channels automatically",
         type: OptionType.BOOLEAN,
         default: true
+    },
+    mobilePush: {
+        description: "Mute Mobile Push Notifications automatically",
+        type: OptionType.BOOLEAN,
+        default: true
     }
 });
 
@@ -99,6 +104,7 @@ function applyDefaultSettings(guildId: string | null) {
     updateGuildNotificationSettings(guildId,
         {
             muted: settings.store.guild,
+            mobile_push: !settings.store.mobilePush,
             suppress_everyone: settings.store.everyone,
             suppress_roles: settings.store.role,
             mute_scheduled_events: settings.store.events,
@@ -128,7 +134,7 @@ export default definePlugin({
         {
             find: ",acceptInvite(",
             replacement: {
-                match: /INVITE_ACCEPT_SUCCESS.+?,(\i)=null!==.+?;/,
+                match: /INVITE_ACCEPT_SUCCESS.+?,(\i)=null!=.+?;/,
                 replace: (m, guildId) => `${m}$self.applyDefaultSettings(${guildId});`
             }
         },

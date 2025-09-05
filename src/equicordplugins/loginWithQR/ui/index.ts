@@ -7,9 +7,7 @@
 import "./styles.css";
 
 import { classNameFactory } from "@api/Styles";
-import { proxyLazy } from "@utils/lazy";
-import { findByPropsLazy } from "@webpack";
-import { Forms } from "@webpack/common";
+import { findComponentByCodeLazy } from "@webpack";
 import { ComponentType, HTMLAttributes } from "react";
 
 export enum SpinnerTypes {
@@ -32,14 +30,8 @@ type Spinner = ComponentType<Omit<HTMLAttributes<HTMLDivElement>, "children"> & 
 };
 
 // https://github.com/Kyuuhachi/VencordPlugins/blob/main/MessageLinkTooltip/index.tsx#L11-L33
-export const { Spinner } = proxyLazy(() => Forms as any as {
-    Spinner: Spinner,
-    SpinnerTypes: typeof SpinnerTypes;
-});
+export const Spinner = findComponentByCodeLazy('"pulsingEllipsis"') as unknown as Spinner;
 
-const icons = findByPropsLazy("PencilIcon");
-export const QrCodeIcon = proxyLazy(() => icons.QrCodeCameraIcon ?? icons.QrCodeIcon) as ComponentType<{
-    size: number;
-}>;
+export const QrCodeIcon = findComponentByCodeLazy("0v3ZM20");
 
 export const cl = classNameFactory("qrlogin-");

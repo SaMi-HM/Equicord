@@ -16,13 +16,13 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { addButton, removeButton } from "@api/MessagePopover";
+import { addMessagePopoverButton, removeMessagePopoverButton } from "@api/MessagePopover";
 import { disableStyle, enableStyle } from "@api/Styles";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
+import { Message } from "@vencord/discord-types";
 import { findByPropsLazy } from "@webpack";
-import { ChannelStore, MessageStore, ReactDOM, Toasts } from "@webpack/common";
-import Message from "discord-types/general/Message";
+import { ChannelStore, createRoot, MessageStore, Toasts } from "@webpack/common";
 import { Root } from "react-dom/client";
 
 import ReplyNavigator from "./ReplyNavigator";
@@ -72,7 +72,7 @@ export default definePlugin({
     authors: [Devs.newwares],
     start() {
         enableStyle(styles);
-        addButton("vc-findreply", message => {
+        addMessagePopoverButton("vc-findreply", message => {
             if (!message.id) return null;
             const replies = findReplies(message);
             if (Vencord.Settings.plugins.FindReply.hideButtonIfNoReply && !replies.length) return null;
@@ -101,7 +101,7 @@ export default definePlugin({
                                 madeComponent = true;
                                 element = document.createElement("div");
                                 document.querySelector("[class^=base_]")!.appendChild(element);
-                                root = ReactDOM.createRoot(element);
+                                root = createRoot(element);
                             }
                             root!.render(<ReplyNavigator replies={replies} />);
                         }
@@ -117,7 +117,7 @@ export default definePlugin({
         });
     },
     stop() {
-        removeButton("vc-findreply");
+        removeMessagePopoverButton("vc-findreply");
         root && root.unmount();
         element?.remove();
         disableStyle(styles);

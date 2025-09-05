@@ -5,19 +5,19 @@
  */
 
 import { classNameFactory } from "@api/Styles";
-import { getIntlMessage, getUniqueUsername } from "@utils/discord";
+import { getGuildAcronym, getIntlMessage, getUniqueUsername } from "@utils/discord";
 import { classes } from "@utils/misc";
+import { Channel, Guild, User } from "@vencord/discord-types";
 import { findByPropsLazy, findComponentByCodeLazy } from "@webpack";
-import { Avatar, ChannelStore, ContextMenuApi, Dots, GuildStore, PresenceStore, ReadStateStore, Text, TypingStore, useDrag, useDrop, useRef, UserStore, useStateFromStores } from "@webpack/common";
-import { Channel, Guild, User } from "discord-types/general";
+import { Avatar, ChannelStore, ContextMenuApi, GuildStore, PresenceStore, ReadStateStore, Text, TypingStore, useDrag, useDrop, useRef, UserStore, useStateFromStores } from "@webpack/common";
 
 import { ChannelTabsProps, CircleQuestionIcon, closeTab, isTabSelected, moveDraggedTabs, moveToTab, openedTabs, settings } from "../util";
 import { TabContextMenu } from "./ContextMenus";
 
-const { getBadgeWidthForValue } = findByPropsLazy("getBadgeWidthForValue");
+const ThreeDots = findComponentByCodeLazy(".dots,", "dotRadius:");
 const dotStyles = findByPropsLazy("numberBadge", "textBadge");
 
-const { FriendsIcon } = findByPropsLazy("FriendsIcon");
+const FriendsIcon = findComponentByCodeLazy("12h1a8");
 const ChannelTypeIcon = findComponentByCodeLazy(".iconContainerWithGuildIcon,");
 
 const cl = classNameFactory("vc-channeltabs-");
@@ -37,7 +37,7 @@ const GuildIcon = ({ guild }: { guild: Guild; }) => {
             className={cl("icon")}
         />
         : <div className={cl("guild-acronym-icon")}>
-            <Text variant="text-xs/semibold" tag="span">{guild.acronym}</Text>
+            <Text variant="text-xs/semibold" tag="span">{getGuildAcronym(guild)}</Text>
         </div>;
 };
 
@@ -52,7 +52,7 @@ const ChannelIcon = ({ channel }: { channel: Channel; }) =>
 
 function TypingIndicator({ isTyping }: { isTyping: boolean; }) {
     return isTyping
-        ? <Dots dotRadius={3} themed={true} className={cl("typing-indicator")} />
+        ? <ThreeDots dotRadius={3} themed={true} className={cl("typing-indicator")} />
         : null;
 }
 
@@ -70,7 +70,7 @@ export const NotificationDot = ({ channelIds }: { channelIds: string[]; }) => {
             data-has-mention={!!mentionCount}
             className={classes(dotStyles.numberBadge, dotStyles.baseShapeRound)}
             style={{
-                width: getBadgeWidthForValue(mentionCount || unreadCount)
+                width: "16px"
             }}
             ref={node => node?.style.setProperty("background-color",
                 mentionCount ? "var(--red-400)" : "var(--brand-500)", "important"
@@ -142,7 +142,7 @@ function ChannelTabContent(props: ChannelTabsProps & {
 
     if (channel && recipients?.length) {
         if (recipients.length === 1) {
-            const user = UserStore.getUser(recipients[0]) as User & { globalName: string, isPomelo(): boolean; };
+            const user = UserStore.getUser(recipients[0]) as User & { globalName: string; };
             const username = noPomeloNames
                 ? user.globalName || user.username
                 : getUniqueUsername(user);
@@ -156,7 +156,7 @@ function ChannelTabContent(props: ChannelTabsProps & {
                         isTyping={isTyping}
                         isMobile={isMobile}
                     />
-                    {!compact && <Text className={cl("name-text")} data-pomelo={user.isPomelo()}>
+                    {!compact && <Text className={cl("name-text")}>
                         {username}
                     </Text>}
                     <NotificationDot channelIds={[channel.id]} />

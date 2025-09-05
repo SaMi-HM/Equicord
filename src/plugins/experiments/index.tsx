@@ -1,26 +1,14 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2022 Vendicated and contributors
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * Vencord, a Discord client mod
+ * Copyright (c) 2025 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 import { definePluginSettings } from "@api/Settings";
 import { disableStyle, enableStyle } from "@api/Styles";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { ErrorCard } from "@components/ErrorCard";
-import { Devs } from "@utils/constants";
+import { Devs, IS_MAC } from "@utils/constants";
 import { Margins } from "@utils/margins";
 import definePlugin, { OptionType } from "@utils/types";
 import { findByPropsLazy, findLazy } from "@webpack";
@@ -30,6 +18,9 @@ import hideBugReport from "./hideBugReport.css?managed";
 
 const KbdStyles = findByPropsLazy("key", "combo");
 const BugReporterExperiment = findLazy(m => m?.definition?.id === "2024-09_bug_reporter");
+
+const modKey = IS_MAC ? "cmd" : "ctrl";
+const altKey = IS_MAC ? "opt" : "alt";
 
 const settings = definePluginSettings({
     toolbarDevMenu: {
@@ -43,7 +34,13 @@ const settings = definePluginSettings({
 export default definePlugin({
     name: "Experiments",
     description: "Enable Access to Experiments & other dev-only features in Discord!",
-    authors: [Devs.Megu, Devs.Ven, Devs.Nickyux, Devs.BanTheNons, Devs.Nuckyz],
+    authors: [
+        Devs.Megu,
+        Devs.Ven,
+        Devs.Nickyux,
+        Devs.BanTheNons,
+        Devs.Nuckyz,
+    ],
 
     settings,
 
@@ -58,8 +55,8 @@ export default definePlugin({
         {
             find: 'type:"user",revision',
             replacement: {
-                match: /!(\i)&&"CONNECTION_OPEN".+?;/g,
-                replace: "$1=!0;"
+                match: /!(\i)(?=&&"CONNECTION_OPEN")/,
+                replace: "!($1=true)"
             }
         },
         {
@@ -69,9 +66,9 @@ export default definePlugin({
                 replace: "$&$self.WarningCard(),"
             }
         },
-        // change top right chat toolbar button from the help one to the dev one
+        // Change top right chat toolbar button from the help one to the dev one
         {
-            find: "toolbar:function",
+            find: '"M9 3v18"',
             replacement: {
                 match: /hasBugReporterAccess:(\i)/,
                 replace: "_hasBugReporterAccess:$1=true"
@@ -79,7 +76,7 @@ export default definePlugin({
             predicate: () => settings.store.toolbarDevMenu
         },
 
-        // makes the Favourites Server experiment allow favouriting DMs and threads
+        // Make the Favourites Server experiment allow favouriting DMs and threads
         {
             find: "useCanFavoriteChannel",
             replacement: {
@@ -87,12 +84,35 @@ export default definePlugin({
                 replace: "false",
             }
         },
-        // enable option to always record clips even if you are not streaming
+        // Enable option to always record clips even if you are not streaming
         {
             find: "isDecoupledGameClippingEnabled(){",
             replacement: {
                 match: /\i\.isStaff\(\)/,
                 replace: "true"
+            }
+        },
+        // Enable experiment embed on sent experiment links
+        {
+            find: "dev://experiment/",
+            replacement: [
+                {
+                    match: /\i\.isStaff\(\)/,
+                    replace: "true"
+                },
+                // Fix some tricky experiments name causing a client crash
+                {
+                    match: /.getExperimentBucketName.+?if\(null==(\i)\|\|null==\i(?=\)return null;)/,
+                    replace: "$&||({})[$1]!=null"
+                }
+            ]
+        },
+        // Fix another function which cases crashes with tricky experiment names and the experiment embed
+        {
+            find: "}getServerAssignment(",
+            replacement: {
+                match: /}getServerAssignment\((\i),\i,\i\){/,
+                replace: "$&if($1==null)return;"
             }
         }
     ],
@@ -101,9 +121,6 @@ export default definePlugin({
     stop: () => disableStyle(hideBugReport),
 
     settingsAboutComponent: () => {
-        const isMacOS = navigator.platform.includes("Mac");
-        const modKey = isMacOS ? "cmd" : "ctrl";
-        const altKey = isMacOS ? "opt" : "alt";
         return (
             <React.Fragment>
                 <Forms.FormTitle tag="h3">More Information</Forms.FormTitle>

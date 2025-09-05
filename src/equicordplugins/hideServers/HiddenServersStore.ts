@@ -5,9 +5,9 @@
  */
 
 import * as DataStore from "@api/DataStore";
+import { Guild } from "@vencord/discord-types";
 import { findStoreLazy, proxyLazyWebpack } from "@webpack";
 import { Flux, FluxDispatcher, GuildStore } from "@webpack/common";
-import { Guild } from "discord-types/general";
 
 
 export const HiddenServersStore = proxyLazyWebpack(() => {
@@ -17,14 +17,14 @@ export const HiddenServersStore = proxyLazyWebpack(() => {
     const DB_KEY = "HideServers_servers";
 
     class HiddenServersStore extends Store {
-        private _hiddenGuilds: Set<string> = new Set();
+        public _hiddenGuilds: Set<string> = new Set();
         public get hiddenGuilds() {
             return this._hiddenGuilds;
         }
         // id try to use .initialize() but i dont know how it works
         public async load() {
             const data = await DataStore.get(DB_KEY);
-            if (data) {
+            if (data && data instanceof Set) {
                 this._hiddenGuilds = data;
             }
         }

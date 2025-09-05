@@ -10,8 +10,8 @@ import { Devs } from "@utils/constants";
 import { getCurrentChannel } from "@utils/discord";
 import { ModalCloseButton, ModalContent, ModalHeader, ModalProps, ModalRoot, ModalSize, openModal } from "@utils/modal";
 import definePlugin, { OptionType } from "@utils/types";
-import { Button, Menu, Select, Switch, Text, TextInput, UploadHandler, useEffect, UserStore, useState } from "@webpack/common";
-import { Message } from "discord-types/general";
+import { Message } from "@vencord/discord-types";
+import { Button, Menu, Select, Switch, Text, UploadHandler, useEffect, useState } from "@webpack/common";
 
 import { QuoteIcon } from "./components";
 import { canvasToBlob, fetchImageAsBlob, FixUpQuote, wrapText } from "./utils";
@@ -49,7 +49,6 @@ let recentmessage: Message;
 let grayscale;
 let setStyle: ImageStyle = ImageStyle.inspirational;
 let customMessage: string = "";
-let isUserCustomCapable = false;
 
 enum userIDOptions {
     displayName,
@@ -89,14 +88,7 @@ const preparingSentence: string[] = [];
 const lines: string[] = [];
 
 async function createQuoteImage(avatarUrl: string, quoteOld: string, grayScale: boolean): Promise<Blob> {
-    let quote;
-
-    if (isUserCustomCapable && customMessage.length > 0) {
-        quote = FixUpQuote(customMessage);
-    }
-    else {
-        quote = FixUpQuote(quoteOld);
-    }
+    const quote = FixUpQuote(quoteOld);
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
 
@@ -141,7 +133,7 @@ async function createQuoteImage(avatarUrl: string, quoteOld: string, grayScale: 
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             const avatarBlob = await fetchImageAsBlob(avatarUrl);
-            const fadeBlob = await fetchImageAsBlob("https://files.catbox.moe/54e96l.png");
+            const fadeBlob = await fetchImageAsBlob("https://raw.githubusercontent.com/Equicord/Equibored/refs/heads/main/icons/quoter/quoter.png");
 
             const avatar = new Image();
             const fade = new Image();
@@ -194,14 +186,7 @@ function registerStyleChange(style) {
     GeneratePreview();
 }
 
-async function setIsUserCustomCapable() {
-    const allowList: string[] = await fetch("https://raw.githubusercontent.com/Equicord/Equibored/main/misc/quoterusers.json").then(e => e.json());
-    isUserCustomCapable = allowList.includes(UserStore.getCurrentUser().id);
-}
-
-
 function QuoteModal(props: ModalProps) {
-    setIsUserCustomCapable();
     const [gray, setGray] = useState(true);
     useEffect(() => {
         grayscale = gray;
@@ -225,15 +210,8 @@ function QuoteModal(props: ModalProps) {
                 <ModalCloseButton onClick={props.onClose} />
             </ModalHeader>
             <ModalContent scrollbarType="none">
-                <img src={""} id={"quoterPreview"} style={{ borderRadius: "20px", width: "100%" }}></img>
+                <img alt="" src="" id={"quoterPreview"} style={{ borderRadius: "20px", width: "100%" }}></img>
                 <br></br><br></br>
-                {isUserCustomCapable &&
-                    (
-                        <>
-                            <TextInput onChange={setCustom} value={custom} placeholder="Custom Message"></TextInput>
-                            <br />
-                        </>
-                    )}
                 <Switch value={gray} onChange={setGray}>Grayscale</Switch>
                 <Select look={1}
                     options={Object.keys(ImageStyle).filter(key => isNaN(parseInt(key, 10))).map(key => ({
@@ -279,14 +257,7 @@ async function GeneratePreview() {
 }
 
 function generateFileNamePreview(message) {
-    let words;
-
-    if (isUserCustomCapable && customMessage.length) {
-        words = customMessage.split(" ");
-    }
-    else {
-        words = message.split(" ");
-    }
+    const words = message.split(" ");
     let preview;
     if (words.length >= 6) {
         preview = words.slice(0, 6).join(" ");

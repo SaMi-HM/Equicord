@@ -32,13 +32,14 @@ export interface Settings {
     autoUpdate: boolean;
     autoUpdateNotification: boolean;
     useQuickCss: boolean;
-    enableReactDevtools: boolean;
-    themeLinks: string[];
+    eagerPatches: boolean;
     enabledThemes: string[];
     enabledThemeLinks: string[];
+    themeNames: Record<string, string>;
+    enableReactDevtools: boolean;
+    themeLinks: string[];
     frameless: boolean;
     transparent: boolean;
-    updateRelaunch: boolean;
     winCtrlQ: boolean;
     macosVibrancyStyle:
     | "content"
@@ -91,15 +92,16 @@ const DefaultSettings: Settings = {
     autoUpdateNotification: true,
     useQuickCss: true,
     themeLinks: [],
+    eagerPatches: IS_REPORTER,
     enabledThemes: [],
     enabledThemeLinks: [],
+    themeNames: {},
     enableReactDevtools: false,
     frameless: false,
     transparent: false,
     winCtrlQ: false,
     macosVibrancyStyle: undefined,
     disableMinSize: false,
-    updateRelaunch: false,
     winNativeTitleBar: false,
     plugins: {},
 
@@ -112,7 +114,7 @@ const DefaultSettings: Settings = {
 
     cloud: {
         authenticated: false,
-        url: "https://cloud.equicord.fyi/",
+        url: "https://cloud.equicord.org/",
         settingsSync: false,
         settingsSyncVersion: 0
     },
@@ -236,6 +238,30 @@ export function migratePluginSettings(name: string, ...oldNames: string[]) {
     }
 }
 
+export function migratePluginSetting(pluginName: string, newSetting: string, oldSetting: string) {
+    const settings = SettingsStore.plain.plugins[pluginName];
+    if (!settings) return;
+
+    if (!Object.hasOwn(settings, oldSetting) || Object.hasOwn(settings, newSetting)) return;
+
+    settings[newSetting] = settings[oldSetting];
+    delete settings[oldSetting];
+    SettingsStore.markAsChanged();
+}
+
+export function migrateSettingFromPlugin(newPlugin: string, newSetting: string, oldPlugin: string, oldSetting: string) {
+    const newSettings = SettingsStore.plain.plugins[newPlugin];
+    const oldSettings = SettingsStore.plain.plugins[oldPlugin];
+    if (!oldSettings || !Object.hasOwn(oldSettings, oldSetting)) return;
+    if (!newSettings || (Object.hasOwn(newSettings, newSetting))) return;
+
+    if (Object.hasOwn(newSettings, newSetting)) return;
+
+    newSettings[newSetting] = oldSettings[oldSetting];
+    delete oldSettings[oldSetting];
+    SettingsStore.markAsChanged();
+}
+
 export function definePluginSettings<
     Def extends SettingsDefinition,
     Checks extends SettingsChecks<Def>,
@@ -271,7 +297,7 @@ type ResolveUseSettings<T extends object> = {
     [Key in keyof T]:
     Key extends string
     ? T[Key] extends Record<string, unknown>
-    // @ts-ignore "Type instantiation is excessively deep and possibly infinite"
+    // @ts-expect-error "Type instantiation is excessively deep and possibly infinite"
     ? UseSettings<T[Key]> extends string ? `${Key}.${UseSettings<T[Key]>}` : never
     : Key
     : never;

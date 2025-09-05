@@ -7,8 +7,8 @@
 import { definePluginSettings } from "@api/Settings";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
-import { ChannelStore, GuildMemberStore, GuildStore, RelationshipStore, Text, UserStore } from "@webpack/common";
-import { GuildMember } from "discord-types/general";
+import { GuildMember } from "@vencord/discord-types";
+import { ChannelStore, GuildMemberStore, GuildRoleStore, RelationshipStore, Text, UserStore } from "@webpack/common";
 
 const settings = definePluginSettings(
     {
@@ -36,14 +36,6 @@ const settings = definePluginSettings(
             restartNeeded: true,
             default: true
         },
-        /*
-            hideNewUsers: {
-                type: OptionType.BOOLEAN,
-                description: "Should content from users with the \"I'm new here, say hi!\" badge be blocked\"",
-                restartNeeded: true,
-                default: true
-            },
-        */
         blockedReplyDisplay: {
             type: OptionType.SELECT,
             description: "What should display instead of the message when someone replies to someone you have hidden",
@@ -99,7 +91,7 @@ function shouldHideUser(userId: string, channelId?: string) {
 
 // This is really horror
 function isRoleAllBlockedMembers(roleId, guildId) {
-    const role = GuildStore.getRole(guildId, roleId);
+    const role = GuildRoleStore.getRole(guildId, roleId);
     if (!role) return false;
 
     const membersWithRole: GuildMember[] = GuildMemberStore.getMembers(guildId).filter(member => member.roles.includes(roleId));
@@ -152,8 +144,8 @@ export default definePlugin({
         {
             find: "._areActivitiesExperimentallyHidden=(",
             replacement: {
-                match: /new Date\(\i\):null;/,
-                replace: "$&if($self.shouldHideUser(this.props.user.id, this.props.channel.id)) return null; "
+                match: /(?<=user:(\i),guildId:\i,channel:(\i).*?)BOOST_GEM_ICON.{0,10}\);/,
+                replace: "$&if($self.shouldHideUser($1.id, $2.id)) return null; "
             }
         },
         // stop the role header from displaying if all users with that role are hidden (wip sorta)
@@ -167,9 +159,9 @@ export default definePlugin({
         },
         // "1 blocked message"
         {
-            find: "#{intl::BLOCKED_MESSAGES_HIDE}",
+            find: "#{intl::BLOCKED_MESSAGE_COUNT}}",
             replacement: {
-                match: /\i.memo\(function\(\i\){/,
+                match: /1:\i\.content.length;/,
                 replace: "$&return null;"
             },
             predicate: () => settings.store.hideBlockedMessages
@@ -179,7 +171,7 @@ export default definePlugin({
             find: ".GUILD_APPLICATION_PREMIUM_SUBSCRIPTION||",
             replacement: [
                 {
-                    match: /let \i;let\{repliedAuthor:/,
+                    match: /let \i,\{repliedAuthor:/,
                     replace: "if(arguments[0] != null && arguments[0].referencedMessage.message != null) { if($self.shouldHideUser(arguments[0].referencedMessage.message.author.id, arguments[0].baseMessage.messageReference.channel_id)) { return $self.hiddenReplyComponent(); } }$&"
                 }
             ]
@@ -200,16 +192,16 @@ export default definePlugin({
         {
             find: "getFriendIDs(){",
             replacement: {
-                match: /\i.FRIEND\)/,
+                match: /return \i\.friends/,
                 replace: "$&.filter(id => !$self.shouldHideUser(id))"
             }
         },
         // active now list
         {
-            find: "getUserAffinitiesUserIds(){",
+            find: "ACTIVE_NOW_COLUMN)",
             replacement: {
-                match: /return (\i.affinityUserIds)/,
-                replace: "return new Set(Array.from($1).filter(id => !$self.shouldHideUser(id)))"
+                match: /(\i\.\i),\{\}\)\]/,
+                replace: '"div",{children:$self.activeNowView($1())})]'
             }
         },
         // mutual friends list in user profile
@@ -220,5 +212,14 @@ export default definePlugin({
                 replace: "$1if($2 != undefined) return $2.filter(u => !$self.shouldHideUser(u.key))"
             }
         }
-    ]
+    ],
+    activeNowView(cards) {
+        if (!Array.isArray(cards)) return cards;
+
+        return cards.filter(card => {
+            if (!card?.key) return false;
+            const newKey = card.key.match(/(?:user-|party-spotify:)(.+)/)?.[1];
+            return this.shouldHideUser(newKey) ? null : card;
+        });
+    }
 });

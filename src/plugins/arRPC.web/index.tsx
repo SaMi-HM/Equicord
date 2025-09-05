@@ -23,7 +23,7 @@ import definePlugin, { ReporterTestable } from "@utils/types";
 import { findByCodeLazy } from "@webpack";
 import { ApplicationAssetUtils, FluxDispatcher, Forms, Toasts } from "@webpack/common";
 
-const fetchApplicationsRPC = findByCodeLazy("APPLICATION_RPC(", "Client ID");
+const fetchApplicationsRPC = findByCodeLazy('"Invalid Origin"', ".application");
 
 async function lookupAsset(applicationId: string, key: string): Promise<string> {
     return (await ApplicationAssetUtils.fetchAssetIds(applicationId, [key]))[0];
@@ -36,12 +36,21 @@ async function lookupApp(applicationId: string): Promise<string> {
     return socket.application;
 }
 
+let hideSetting = false;
+
+if (IS_VESKTOP || IS_EQUIBOP || "legcord" in window) {
+    hideSetting = true;
+} else if ("goofcord" in window) {
+    hideSetting = false;
+}
+
 let ws: WebSocket;
 export default definePlugin({
     name: "WebRichPresence (arRPC)",
     description: "Client plugin for arRPC to enable RPC on Discord Web (experimental)",
     authors: [Devs.Ducko],
     reporterTestable: ReporterTestable.None,
+    hidden: hideSetting,
 
     settingsAboutComponent: () => (
         <>
@@ -73,9 +82,6 @@ export default definePlugin({
     },
 
     async start() {
-        // Legcord comes with its own arRPC implementation, so this plugin just confuses users
-        if ("legcord" in window) return;
-
         if (ws) ws.close();
         ws = new WebSocket("ws://127.0.0.1:1337"); // try to open WebSocket
 

@@ -10,12 +10,12 @@ import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/Co
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Devs, EquicordDevs } from "@utils/constants";
 import definePlugin from "@utils/types";
+import { Channel, Message } from "@vencord/discord-types";
 import { ChannelStore, Menu } from "@webpack/common";
-import { Channel, Message } from "discord-types/general";
 import { JSX } from "react";
 
 import ChannelsTabsContainer from "./components/ChannelTabsContainer";
-import { BasicChannelTabsProps, createTab, settings } from "./util";
+import { BasicChannelTabsProps, createTab, handleChannelSwitch, settings } from "./util";
 import * as ChannelTabsUtils from "./util";
 
 const contextMenuPatch: NavContextMenuPatchCallback = (children, props: { channel: Channel, messageId?: string; }) =>
@@ -37,7 +37,7 @@ const contextMenuPatch: NavContextMenuPatchCallback = (children, props: { channe
 export default definePlugin({
     name: "ChannelTabs",
     description: "Group your commonly visited channels in tabs, like a browser",
-    authors: [Devs.TheSun, Devs.TheKodeToad, EquicordDevs.keifufu, Devs.Nickyux],
+    authors: [Devs.TheSun, Devs.TheKodeToad, EquicordDevs.keifufu, Devs.Nickyux, EquicordDevs.DiabeloDEV],
     dependencies: ["ContextMenuAPI"],
     contextMenus: {
         "channel-mention-context": contextMenuPatch,
@@ -48,8 +48,16 @@ export default definePlugin({
         {
             find: ".COLLECTIBLES_SHOP_FULLSCREEN))",
             replacement: {
-                match: /(\?void 0:(\i)\.channelId.{0,250})\i\.Fragment,{/,
+                match: /(\?void 0:(\i)\.channelId.{0,300})"div",{/,
                 replace: "$1$self.render,{currentChannel:$2,"
+            }
+        },
+        // intercept channel navigation to switch/create tabs
+        {
+            find: "sourceLocationStack,null",
+            replacement: {
+                match: /(\i\((\i),(\i),\i,\i\)\{)(.{0,25}"transitionToGuild)/,
+                replace: "$1$self.handleNavigation($2,$3);$4"
             }
         },
         // ctrl click to open in new tab in inbox unread
@@ -78,7 +86,7 @@ export default definePlugin({
         },
         // prevent issues with the pins/inbox popouts being too tall
         {
-            find: ".messagesPopoutWrap",
+            find: ".messagesPopoutWrap),style",
             replacement: {
                 match: /\i&&\((\i).maxHeight.{0,5}\)/,
                 replace: "$&;$1.maxHeight-=$self.containerHeight"
@@ -94,12 +102,25 @@ export default definePlugin({
         currentChannel: BasicChannelTabsProps,
         children: JSX.Element;
     }) {
+        const tabsContainer = (
+            <ErrorBoundary>
+                <ChannelsTabsContainer {...currentChannel} />
+            </ErrorBoundary>
+        );
+
+        if (settings.store.tabBarPosition === "top") {
+            return (
+                <>
+                    {tabsContainer}
+                    {children}
+                </>
+            );
+        }
+
         return (
             <>
-                <ErrorBoundary>
-                    <ChannelsTabsContainer {...currentChannel} />
-                </ErrorBoundary>
                 {children}
+                {tabsContainer}
             </>
         );
     },
@@ -111,6 +132,15 @@ export default definePlugin({
             compact: false
         };
         createTab(tab, false, message.id);
+    },
+
+    handleNavigation(guildId: string, channelId: string) {
+        if (!guildId || !channelId) return;
+
+        // wait for discord to update channel data
+        requestAnimationFrame(() => {
+            handleChannelSwitch({ guildId, channelId });
+        });
     },
 
     util: ChannelTabsUtils,

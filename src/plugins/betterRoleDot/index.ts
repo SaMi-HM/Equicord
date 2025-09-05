@@ -18,14 +18,13 @@
 
 import { Settings } from "@api/Settings";
 import { Devs } from "@utils/constants";
+import { copyWithToast } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
-import { Clipboard, Toasts } from "@webpack/common";
 
 export default definePlugin({
     name: "BetterRoleDot",
     authors: [Devs.Ven, Devs.AutumnVN],
-    description:
-        "Copy role colour on RoleDot (accessibility setting) click. Also allows using both RoleDot and coloured names simultaneously",
+    description: "Copy role colour on RoleDot (accessibility setting) click. Also allows using both RoleDot and coloured names simultaneously",
 
     patches: [
         {
@@ -84,15 +83,6 @@ export default definePlugin({
     },
 
     copyToClipBoard(color: string) {
-        Clipboard.copy(color);
-        Toasts.show({
-            message: "Copied to Clipboard!",
-            type: Toasts.Type.SUCCESS,
-            id: Toasts.genId(),
-            options: {
-                duration: 1000,
-                position: Toasts.Position.BOTTOM
-            }
-        });
+        copyWithToast(color);
     },
 });

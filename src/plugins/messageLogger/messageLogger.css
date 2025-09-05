@@ -2,33 +2,26 @@
     display: none;
 }
 
-.messagelogger-deleted
-:is(
-    video,
+.messagelogger-deleted:is(.messagelogger-deleted-attachment,
     .emoji,
     [data-type="sticker"],
-    iframe,
-    .messagelogger-deleted-attachment,
-    [class|="inlineMediaEmbed"]
-) {
+    [class*="embedIframe"],
+    [class*="embedSpotify"],
+    [class*="imageContainer"]) {
     filter: grayscale(1) !important;
     transition: 150ms filter ease-in-out;
 
     &[class*="hiddenMosaicItem_"] {
         filter: grayscale(1) blur(var(--custom-message-attachment-spoiler-blur-radius, 44px)) !important;
     }
+
+    &:hover {
+        filter: grayscale(0) !important;
+    }
 }
 
-.messagelogger-deleted
-:is(
-    video,
-    .emoji,
-    [data-type="sticker"],
-    iframe,
-    .messagelogger-deleted-attachment,
-    [class|="inlineMediaEmbed"]
-):hover {
-    filter: grayscale(0) !important;
+.messagelogger-deleted [class*="spoilerWarning"] {
+    color: var(--status-danger);
 }
 
 .theme-dark .messagelogger-edited {
@@ -51,4 +44,18 @@
 .vc-ml-modal-tab-bar {
     flex-wrap: wrap;
     gap: 16px;
+}
+
+.messagelogger-diff-added {
+    color: #85E89D;
+}
+
+.messagelogger-diff-removed {
+    color: #F47068;
+}
+
+/* when diffs are disabled for a specific message, remove diff colors */
+.messagelogger-diff-disabled .messagelogger-diff-added,
+.messagelogger-diff-disabled .messagelogger-diff-removed {
+    color: inherit;
 }

@@ -24,7 +24,6 @@ import definePlugin, { OptionType, ReporterTestable } from "@utils/types";
 import { initWs, socket, stopWs } from "./initWs";
 console.log("imported");
 export const PORT = 8485;
-const NAV_ID = "dev-companion-reconnect";
 
 export const logger = new Logger("DevCompanion");
 
@@ -48,7 +47,7 @@ export const settings = definePluginSettings({
 
 export default definePlugin({
     name: "DevCompanion",
-    description: "Dev Companion Plugin",
+    description: "Dev Companion Plugin. Please report anything not working or being weird (most likely its a bug) to sadan, either ping or dm, thanks!",
     authors: [Devs.Ven, Devs.sadan, Devs.Samwich],
     reporterTestable: ReporterTestable.None,
     settings,
@@ -62,9 +61,10 @@ export default definePlugin({
 
     start() {
         // if we're running the reporter, we need to initws in the reporter file to avoid a race condition
-        if (!IS_COMPANION_TEST)
-            initWs();
+        if (!IS_DEV) throw new Error("This plugin requires dev mode to run, please build with pnpm build --dev");
+        initWs();
     },
 
     stop: stopWs,
 });
+
