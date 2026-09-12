@@ -17,8 +17,7 @@
 */
 
 import { Settings } from "@api/Settings";
-import { findStoreLazy } from "@webpack";
-import { ChannelStore, SelectedChannelStore, UserStore } from "@webpack/common";
+import { ChannelStore, SelectedChannelStore, UserGuildSettingsStore, UserStore } from "@webpack/common";
 
 import { settings } from "../index";
 import { LoggedMessageJSON } from "../types";
@@ -26,7 +25,6 @@ import { findLastIndex, getGuildIdByChannel } from "./misc";
 
 export * from "./cleanUp";
 export * from "./misc";
-
 
 // stolen from mlv2
 // https://github.com/1Lighty/BetterDiscordPlugins/blob/master/Plugins/MessageLoggerV2/MessageLoggerV2.plugin.js#L2367
@@ -79,8 +77,6 @@ interface ShouldIgnoreArguments {
 
 const EPHEMERAL = 64;
 
-const UserGuildSettingsStore = findStoreLazy("UserGuildSettingsStore");
-
 /**
   * the function `shouldIgnore` evaluates whether a message should be ignored or kept, following a priority hierarchy: User > Channel > Server.
   * In this hierarchy, whitelisting takes priority; if any element (User, Channel, or Server) is whitelisted, the message is kept.
@@ -126,7 +122,6 @@ export function shouldIgnore({ channelId, authorId, guildId, flags, bot, ghostPi
     const isAuthorBlacklisted = blacklistedIds.includes(authorId);
     const isChannelBlacklisted = blacklistedIds.includes(channelId);
 
-
     const shouldIgnoreMutedGuilds = settings.store.ignoreMutedGuilds;
     const shouldIgnoreMutedCategories = settings.store.ignoreMutedCategories;
     const shouldIgnoreMutedChannels = settings.store.ignoreMutedChannels;
@@ -153,8 +148,8 @@ export function shouldIgnore({ channelId, authorId, guildId, flags, bot, ghostPi
     if (isBlacklisted && (!isAuthorWhitelisted || !isChannelWhitelisted)) return true; // ignore
 
     if (guildId != null && shouldIgnoreMutedGuilds && UserGuildSettingsStore.isMuted(guildId)) return true; // ignore
-    if (channelId != null && shouldIgnoreMutedCategories && UserGuildSettingsStore.isCategoryMuted(guildId, channelId)) return true; // ignore
-    if (channelId != null && shouldIgnoreMutedChannels && UserGuildSettingsStore.isChannelMuted(guildId, channelId)) return true; // ignore
+    if (channelId != null && shouldIgnoreMutedCategories && UserGuildSettingsStore.isCategoryMuted(guildId!, channelId)) return true; // ignore
+    if (channelId != null && shouldIgnoreMutedChannels && UserGuildSettingsStore.isChannelMuted(guildId!, channelId)) return true; // ignore
 
     return false; // keep;
 }
@@ -170,9 +165,11 @@ export function addToXAndRemoveFromOpposite(list: ListType, id: string) {
 
 export function addToX(list: ListType, id: string) {
     const items = settings.store[list] ? settings.store[list].split(",") : [];
-    items.push(id);
 
-    settings.store[list] = items.join(",");
+    if (!items.includes(id)) {
+        items.push(id);
+        settings.store[list] = items.join(",");
+    }
 }
 
 export function removeFromX(list: ListType, id: string) {
@@ -180,6 +177,6 @@ export function removeFromX(list: ListType, id: string) {
     const index = items.indexOf(id);
     if (index !== -1) {
         items.splice(index, 1);
+        settings.store[list] = items.join(",");
     }
-    settings.store[list] = items.join(",");
 }

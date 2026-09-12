@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { copyWithToast } from "@utils/misc";
+import { copyWithToast } from "@utils/discord";
 import { findComponentByCodeLazy } from "@webpack";
 import { FluxDispatcher, Menu } from "@webpack/common";
 
@@ -29,6 +29,7 @@ export function LyricsContextMenu() {
                 disabled={!currLyric?.text}
                 action={() => copyWithToast(currLyric!.text!, "Lyric copied!")}
                 icon={CopyIcon}
+                leadingAccessory={{ type: "icon", icon: CopyIcon }}
             />
         </Menu.Menu>
     );

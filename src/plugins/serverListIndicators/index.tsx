@@ -20,12 +20,12 @@ import "./styles.css";
 
 import { addServerListElement, removeServerListElement, ServerListRenderPosition } from "@api/ServerList";
 import { definePluginSettings } from "@api/Settings";
-import { classNameFactory } from "@api/Styles";
+import { BaseText } from "@components/BaseText";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Devs, EquicordDevs } from "@utils/constants";
+import { classNameFactory } from "@utils/css";
 import definePlugin, { OptionType } from "@utils/types";
-import { findStoreLazy } from "@webpack";
-import { GuildStore, PresenceStore, RelationshipStore, Text, Tooltip, useStateFromStores } from "@webpack/common";
+import { GuildStore, PresenceStore, RelationshipStore, Tooltip, UserGuildJoinRequestStore, useStateFromStores } from "@webpack/common";
 
 const enum IndicatorType {
     SERVER = 1 << 0,
@@ -33,11 +33,8 @@ const enum IndicatorType {
     BOTH = SERVER | FRIEND,
 }
 
-
 let onlineFriendsCount = 0;
 let guildCount = 0;
-
-const UserGuildJoinRequestStore = findStoreLazy("UserGuildJoinRequestStore");
 
 function FriendsIndicator() {
     onlineFriendsCount = useStateFromStores([RelationshipStore, PresenceStore], () => {
@@ -74,11 +71,11 @@ function FriendsIndicator() {
                     </path>
                 </svg>
             }
-            <Text
-                variant="text-xs/normal"
+            <BaseText
+                size="xs"
                 id="vc-friendcount-text">{onlineFriendsCount}
-            </Text>
-            {!!settings.store.useCompact && <Text variant="text-xs/normal" id="vc-friendcount-text-compact">Friends</Text>}
+            </BaseText>
+            {!!settings.store.useCompact && <BaseText size="xs" id="vc-friendcount-text-compact">Friends</BaseText>}
         </div>
     );
 }
@@ -110,11 +107,11 @@ function ServersIndicator() {
                     </path>
                 </svg>
             }
-            <Text
-                variant="text-xs/normal"
+            <BaseText
+                size="xs"
                 id="vc-guildcount-text">{guildCount}
-            </Text>
-            {!!settings.store.useCompact && <Text variant="text-xs/normal" id="vc-guildcount-text-compact">Servers</Text>}
+            </BaseText>
+            {!!settings.store.useCompact && <BaseText size="xs" id="vc-guildcount-text-compact">Servers</BaseText>}
         </div>
     );
 }
@@ -141,7 +138,8 @@ export const settings = definePluginSettings({
 export default definePlugin({
     name: "ServerListIndicators",
     description: "Add online friend count or server count in the server list",
-    authors: [Devs.dzshn, EquicordDevs.Panniku],
+    tags: ["Servers", "Appearance"],
+    authors: [Devs.Rini, EquicordDevs.Panniku],
     dependencies: ["ServerListAPI"],
     settings,
 
@@ -161,14 +159,14 @@ export default definePlugin({
                 break;
         }
 
-        const cl = useCompact ? classNameFactory("vc-indicators-compact") : classNameFactory("vc-indicators");
+        const cl = useCompact ? classNameFactory("vc-indicators-compact-") : classNameFactory("vc-indicators-");
 
         return <ErrorBoundary noop>
-            <div id={cl("-container")}>
+            <div id={cl("container")}>
                 <Tooltip text={text} position="right">
                     {({ onMouseEnter, onMouseLeave }) => (
                         <div
-                            id={cl("-indicator-items")}
+                            id={cl("indicator-items")}
                             onMouseEnter={onMouseEnter}
                             onMouseLeave={onMouseLeave}>
                             {!!(mode & IndicatorType.FRIEND) && <FriendsIndicator />}

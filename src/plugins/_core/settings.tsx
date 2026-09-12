@@ -1,223 +1,299 @@
 /*
- * Vencord, a modification for Discord's desktop app
- * Copyright (c) 2022 Vendicated and Megumin
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ * Vencord, a Discord client mod
+ * Copyright (c) 2025 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
-import { Settings } from "@api/Settings";
-import { BackupAndRestoreTab, CloudTab, PatchHelperTab, PluginsTab, UpdaterTab, VencordTab } from "@components/settings";
-import ThemesTab from "@components/ThemeSettings/ThemesTab";
+import { definePluginSettings } from "@api/Settings";
+import { BackupRestoreIcon, CloudIcon, LogIcon, MainSettingsIcon, PaintbrushIcon, PatchHelperIcon, PluginsIcon, UpdaterIcon } from "@components/Icons";
+import {
+    BackupAndRestoreTab,
+    ChangelogTab,
+    CloudTab,
+    PatchHelperTab,
+    PluginsTab,
+    ThemesTab,
+    UpdaterTab,
+    VencordTab,
+} from "@components/settings";
+import { gitHashShort } from "@shared/vencordUserAgent";
 import { Devs } from "@utils/constants";
-import { getIntlMessage } from "@utils/discord";
-import definePlugin, { OptionType } from "@utils/types";
-import { shortGitHash } from "@utils/updater";
+import { isTruthy } from "@utils/guards";
+import definePlugin, { IconProps, OptionType } from "@utils/types";
+import { waitFor } from "@webpack";
 import { React } from "@webpack/common";
+import type { ComponentType, PropsWithChildren, ReactNode } from "react";
 
+const enum LayoutType {
+    ROOT = 0,
+    SECTION = 1,
+    SIDEBAR_ITEM = 2,
+    PANEL = 3,
+    SPLIT = 4,
+    CATEGORY = 5,
+    ACCORDION = 6,
+    LIST = 7,
+    RELATED = 8,
+    FIELD_SET = 9,
+    TAB_ITEM = 10,
+    STATIC = 11,
+    BUTTON = 12,
+    TOGGLE = 13,
+    SLIDER = 14,
+    SELECT = 15,
+    RADIO = 16,
+    NAVIGATOR = 17,
+    CUSTOM = 18
+}
 
-type SectionType = "HEADER" | "DIVIDER" | "CUSTOM";
-type SectionTypes = Record<SectionType, SectionType>;
+let LayoutTypes = {
+    SECTION: 1,
+    SIDEBAR_ITEM: 2,
+    PANEL: 3,
+    CATEGORY: 5,
+    CUSTOM: 19,
+};
+waitFor(["SECTION", "SIDEBAR_ITEM", "PANEL", "CUSTOM"], v => LayoutTypes = v);
+
+const enum SectionType {
+    HEADER = "HEADER",
+    DIVIDER = "DIVIDER",
+    CUSTOM = "CUSTOM"
+}
+
+type SettingsLocation =
+    | "top"
+    | "aboveNitro"
+    | "belowNitro"
+    | "aboveActivity"
+    | "belowActivity"
+    | "bottom";
+
+interface SettingsLayoutNode {
+    type: LayoutType;
+    key?: string;
+    legacySearchKey?: string;
+    getLegacySearchKey?(): string;
+    useLabel?(): string;
+    useTitle?(): string;
+    buildLayout?(): SettingsLayoutNode[];
+    icon?(): ReactNode;
+    render?(): ReactNode;
+    StronglyDiscouragedCustomComponent?(): ReactNode;
+}
+
+interface EntryOptions {
+    key: string;
+    title: string;
+    panelTitle?: string;
+    Component: ComponentType<{}>;
+    Icon: ComponentType<IconProps>;
+}
+
+interface SettingsLayoutBuilder {
+    key?: string;
+    buildLayout(): SettingsLayoutNode[];
+}
+
+const settings = definePluginSettings({
+    settingsLocation: {
+        type: OptionType.SELECT,
+        description: "Where to put the Equicord settings section",
+        options: [
+            { label: "At the very top", value: "top" },
+            { label: "Above Billing section", value: "aboveNitro", default: true },
+            { label: "Below Billing section", value: "belowNitro" },
+            { label: "Above Games & Apps Settings", value: "aboveActivity" },
+            { label: "Below Games & Apps Settings", value: "belowActivity" },
+            { label: "At the very bottom", value: "bottom" },
+        ] as { label: string; value: SettingsLocation; default?: boolean; }[]
+    },
+    includeVencordInfoWhenCopying: {
+        type: OptionType.BOOLEAN,
+        description: "Also copy Equicord info (Equicord, Electron, Chromium) when clicking the version info in the bottom left area of the Settings page",
+        default: true
+    }
+});
 
 export default definePlugin({
     name: "Settings",
     description: "Adds Settings UI and debug info",
     authors: [Devs.Ven, Devs.Megu],
+    tags: ["Utility"],
     required: true,
+
+    settings,
 
     patches: [
         {
-            find: ".versionHash",
+            find: "#{intl::COPY_VERSION}",
             replacement: [
                 {
-                    match: /\[\(0,\i\.jsxs?\)\((.{1,10}),(\{[^{}}]+\{.{0,20}.versionHash,.+?\})\)," "/,
-                    replace: (m, component, props) => {
-                        props = props.replace(/children:\[.+\]/, "");
-                        return `${m},$self.makeInfoElements(${component}, ${props})`;
+                    match: /\.RELEASE_CHANNEL/,
+                    replace: "$&.replace(/^./, c => c.toUpperCase())"
+                },
+                {
+                    match: /"text-xxs\/normal".{0,300}?(?=null!=(\i)&&(.{0,20}\i\.\i.{0,200}?,children:).{0,15}?("span"),{className:(\i\.\i),children:\["Build Override: ",\1\.id,\i\]\}\)\}\))/,
+                    replace: (m, _buildOverride, makeRow, component, className) => {
+                        return `${m},$self.makeInfoElements(${component},${className}).map(e=>${makeRow}e})),`;
                     }
                 },
                 {
-                    match: /copyValue:\i\.join\(" "\)/,
+                    match: /copyValue:\i\.join\(" "\)/g,
                     replace: "$& + $self.getInfoString()"
                 }
             ]
         },
         {
-            find: ".SEARCH_NO_RESULTS&&0===",
-            replacement: [
-                {
-                    match: /(?<=section:(.{0,50})\.DIVIDER\}\))([,;])(?=.{0,200}(\i)\.push.{0,100}label:(\i)\.header)/,
-                    replace: (_, sectionTypes, commaOrSemi, elements, element) => `${commaOrSemi} $self.addSettings(${elements}, ${element}, ${sectionTypes}) ${commaOrSemi}`
-                },
-                {
-                    match: /({(?=.+?function (\i).{0,160}(\i)=\i\.useMemo.{0,140}return \i\.useMemo\(\(\)=>\i\(\3).+?\(\)=>)\2/,
-                    replace: (_, rest, settingsHook) => `${rest}$self.wrapSettingsHook(${settingsHook})`
-                }
-            ]
-        },
-        {
-            find: "#{intl::USER_SETTINGS_ACTIONS_MENU_LABEL}",
+            find: ".buildLayout().map",
             replacement: {
-                match: /(?<=function\((\i),\i\)\{)(?=let \i=Object.values\(\i.\i\).*?(\i\.\i)\.open\()/,
-                replace: "$2.open($1);return;"
+                match: /(\i)\.buildLayout\(\)(?=\.map)/,
+                replace: "$self.buildLayout($1)"
             }
         }
     ],
 
-    customSections: [] as ((SectionTypes: SectionTypes) => any)[],
+    buildEntry(options: EntryOptions): SettingsLayoutNode {
+        const { key, title, panelTitle = title, Component, Icon } = options;
 
-    makeSettingsCategories(SectionTypes: SectionTypes) {
-        return [
-            {
-                section: SectionTypes.HEADER,
-                label: "Equicord",
-                className: "vc-settings-header"
-            },
-            {
-                section: "EquicordSettings",
-                label: "Equicord",
-                element: VencordTab,
-                className: "vc-settings"
-            },
-            {
-                section: "EquicordPlugins",
-                label: "Plugins",
-                searchableTitles: ["Plugins"],
-                element: PluginsTab,
-                className: "vc-plugins"
-            },
-            {
-                section: "EquicordThemes",
-                label: "Themes",
-                searchableTitles: ["Themes"],
-                element: ThemesTab,
-                className: "vc-themes"
-            },
-            !IS_UPDATER_DISABLED && {
-                section: "EquicordUpdater",
-                label: "Updater",
-                searchableTitles: ["Updater"],
-                element: UpdaterTab,
-                className: "vc-updater"
-            },
-            {
-                section: "EquicordCloud",
-                label: "Cloud",
-                searchableTitles: ["Cloud"],
-                element: CloudTab,
-                className: "vc-cloud"
-            },
-            {
-                section: "settings/tabsSync",
-                label: "Backup & Restore",
-                searchableTitles: ["Backup & Restore"],
-                element: BackupAndRestoreTab,
-                className: "vc-backup-restore"
-            },
-            IS_DEV && {
-                section: "EquicordPatchHelper",
-                label: "Patch Helper",
-                searchableTitles: ["Patch Helper"],
-                element: PatchHelperTab,
-                className: "vc-patch-helper"
-            },
-            ...this.customSections.map(func => func(SectionTypes)),
-            {
-                section: SectionTypes.DIVIDER
-            }
-        ].filter(Boolean);
-    },
-
-    isRightSpot({ header, settings }: { header?: string; settings?: string[]; }) {
-        const firstChild = settings?.[0];
-        // lowest two elements... sanity backup
-        if (firstChild === "LOGOUT" || firstChild === "SOCIAL_LINKS") return true;
-
-        const { settingsLocation } = Settings.plugins.Settings;
-
-        if (settingsLocation === "bottom") return firstChild === "LOGOUT";
-        if (settingsLocation === "belowActivity") return firstChild === "CHANGELOG";
-
-        if (!header) return;
-
-        try {
-            const names = {
-                top: getIntlMessage("USER_SETTINGS"),
-                aboveNitro: getIntlMessage("BILLING_SETTINGS"),
-                belowNitro: getIntlMessage("APP_SETTINGS"),
-                aboveActivity: getIntlMessage("ACTIVITY_SETTINGS")
-            };
-
-            if (!names[settingsLocation] || names[settingsLocation].endsWith("_SETTINGS"))
-                return firstChild === "PREMIUM";
-
-            return header === names[settingsLocation];
-        } catch {
-            return firstChild === "PREMIUM";
-        }
-    },
-
-    patchedSettings: new WeakSet(),
-
-    addSettings(elements: any[], element: { header?: string; settings: string[]; }, sectionTypes: SectionTypes) {
-        if (this.patchedSettings.has(elements) || !this.isRightSpot(element)) return;
-
-        this.patchedSettings.add(elements);
-
-        elements.push(...this.makeSettingsCategories(sectionTypes));
-    },
-
-    wrapSettingsHook(originalHook: (...args: any[]) => Record<string, unknown>[]) {
-        return (...args: any[]) => {
-            const elements = originalHook(...args);
-            if (!this.patchedSettings.has(elements))
-                elements.unshift(...this.makeSettingsCategories({
-                    HEADER: "HEADER",
-                    DIVIDER: "DIVIDER",
-                    CUSTOM: "CUSTOM"
-                }));
-
-            return elements;
+        const panel: SettingsLayoutNode = {
+            key: key + "_panel",
+            type: LayoutTypes.PANEL,
+            useTitle: () => panelTitle,
+            buildLayout: () => [{
+                type: LayoutTypes.CATEGORY,
+                key: key + "_category",
+                buildLayout: () => [{
+                    type: LayoutTypes.CUSTOM,
+                    key: key + "_custom",
+                    Component: Component,
+                    useSearchTerms: () => [title]
+                }]
+            }]
         };
+
+        return ({
+            key,
+            type: LayoutTypes.SIDEBAR_ITEM,
+            useTitle: () => title,
+            icon: () => <Icon width={20} height={20} />,
+            buildLayout: () => [panel]
+        });
     },
 
-    options: {
-        settingsLocation: {
-            type: OptionType.SELECT,
-            description: "Where to put the Equicord settings section",
-            options: [
-                { label: "At the very top", value: "top" },
-                { label: "Above the Nitro section", value: "aboveNitro", default: true },
-                { label: "Below the Nitro section", value: "belowNitro" },
-                { label: "Above Activity Settings", value: "aboveActivity" },
-                { label: "Below Activity Settings", value: "belowActivity" },
-                { label: "At the very bottom", value: "bottom" },
-            ]
-        },
+    buildLayout(originalLayoutBuilder: SettingsLayoutBuilder) {
+        const layout = originalLayoutBuilder.buildLayout();
+        if (originalLayoutBuilder.key !== "$Root") return layout;
+        if (!Array.isArray(layout)) return layout;
+        if (layout.some(s => s?.key === "equicord_section")) return layout;
+
+        const { buildEntry } = this;
+
+        const equicordEntries: SettingsLayoutNode[] = [
+            buildEntry({
+                key: "equicord_main",
+                title: "Equicord",
+                panelTitle: "Equicord Settings",
+                Component: VencordTab,
+                Icon: MainSettingsIcon
+            }),
+            buildEntry({
+                key: "equicord_plugins",
+                title: "Plugins",
+                Component: PluginsTab,
+                Icon: PluginsIcon
+            }),
+            buildEntry({
+                key: "equicord_themes",
+                title: "Themes",
+                Component: ThemesTab,
+                Icon: PaintbrushIcon
+            }),
+            !IS_UPDATER_DISABLED && UpdaterTab && buildEntry({
+                key: "equicord_updater",
+                title: "Updater",
+                panelTitle: "Equicord Updater",
+                Component: UpdaterTab,
+                Icon: UpdaterIcon
+            }),
+            buildEntry({
+                key: "equicord_changelog",
+                title: "Changelog",
+                Component: ChangelogTab,
+                Icon: LogIcon,
+            }),
+            buildEntry({
+                key: "equicord_cloud",
+                title: "Cloud",
+                panelTitle: "Equicord Cloud",
+                Component: CloudTab,
+                Icon: CloudIcon
+            }),
+            buildEntry({
+                key: "equicord_backup_restore",
+                title: "Backup & Restore",
+                Component: BackupAndRestoreTab,
+                Icon: BackupRestoreIcon
+            }),
+            !IS_STANDALONE && PatchHelperTab && buildEntry({
+                key: "equicord_patch_helper",
+                title: "Patch Helper",
+                Component: PatchHelperTab,
+                Icon: PatchHelperIcon
+            }),
+            ...this.customEntries.map(buildEntry)
+        ].filter(isTruthy);
+
+        const equicordSection: SettingsLayoutNode = {
+            key: "equicord_section",
+            type: LayoutTypes.SECTION,
+            useTitle: () => "Equicord Settings",
+            buildLayout: () => equicordEntries
+        };
+
+        const { settingsLocation } = settings.store;
+
+        const places: Record<SettingsLocation, string> = {
+            top: "user_section",
+            aboveNitro: "billing_section",
+            belowNitro: "billing_section",
+            aboveActivity: "games_and_apps_section",
+            belowActivity: "games_and_apps_section",
+            bottom: "utility_section"
+        };
+
+        const key = places[settingsLocation] ?? places.top;
+        let idx = layout.findIndex(s => typeof s?.key === "string" && s.key === key);
+
+        if (idx === -1) {
+            idx = 2;
+        } else if (settingsLocation.startsWith("below")) {
+            idx += 1;
+        }
+
+        layout.splice(idx, 0, equicordSection);
+
+        return layout;
     },
+
+    customSections: [] as ((SectionTypes: Record<string, string>) => { section: string; element: ComponentType; label: string; id?: string; })[],
+    customEntries: [] as EntryOptions[],
 
     get electronVersion() {
-        return VencordNative.native.getVersions().electron || window.legcord?.electron || null;
+        return VencordNative.native.getVersions().electron ?? window.legcord?.electron ?? null;
     },
 
     get chromiumVersion() {
         try {
-            return VencordNative.native.getVersions().chrome
-                // @ts-expect-error Typescript will add userAgentData IMMEDIATELY
-                || navigator.userAgentData?.brands?.find(b => b.brand === "Chromium" || b.brand === "Google Chrome")?.version
-                || null;
+            return (
+                VencordNative.native.getVersions().chrome ??
+                // @ts-expect-error userAgentData types
+                navigator.userAgentData?.brands?.find(
+                    (b: { brand: string; }) => b.brand === "Chromium" || b.brand === "Google Chrome",
+                )?.version ??
+                null
+            );
         } catch {
-            // inb4 some stupid browser throws unsupported error for navigator.userAgentData, it's only in chromium
             return null;
         }
     },
@@ -225,7 +301,7 @@ export default definePlugin({
     getVersionInfo(support = true) {
         let version = "";
 
-        if (IS_DEV) version = "Dev";
+        if (IS_DEV) version = "Dev Build";
         if (IS_WEB) version = "Web";
         if (IS_VESKTOP) version = `Vesktop v${VesktopNative.app.getVersion()}`;
         if (IS_EQUIBOP) version = `Equibop v${VesktopNative.app.getVersion()}`;
@@ -237,7 +313,7 @@ export default definePlugin({
     getInfoRows() {
         const { electronVersion, chromiumVersion, getVersionInfo } = this;
 
-        const rows = [`Equicord ${shortGitHash()}${getVersionInfo()}`];
+        const rows = [`Equicord ${gitHashShort}${getVersionInfo()}`];
 
         if (electronVersion) rows.push(`Electron ${electronVersion}`);
         if (chromiumVersion) rows.push(`Chromium ${chromiumVersion}`);
@@ -246,12 +322,13 @@ export default definePlugin({
     },
 
     getInfoString() {
+        if (!settings.store.includeVencordInfoWhenCopying) return "";
         return "\n" + this.getInfoRows().join("\n");
     },
 
-    makeInfoElements(Component: React.ComponentType<React.PropsWithChildren>, props: React.PropsWithChildren) {
+    makeInfoElements(Component: ComponentType<PropsWithChildren<{ className?: string; }>>, className: string) {
         return this.getInfoRows().map((text, i) =>
-            <Component key={i} {...props}>{text}</Component>
+            <Component key={i} className={className}>{text}</Component>
         );
     }
 });

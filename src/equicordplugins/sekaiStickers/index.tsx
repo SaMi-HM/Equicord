@@ -7,8 +7,8 @@
 import { ChatBarButton, ChatBarButtonFactory } from "@api/ChatButtons";
 import { definePluginSettings } from "@api/Settings";
 import { Devs } from "@utils/constants";
-import { openModal } from "@utils/modal";
 import definePlugin, { OptionType } from "@utils/types";
+import { openModal } from "@webpack/common";
 
 import SekaiStickersModal from "./Components/SekaiStickersModal";
 import { kanadeSvg } from "./kanade.svg";
@@ -33,10 +33,14 @@ let IS_FONTS_LOADED = false;
 export default definePlugin({
     name: "SekaiStickers",
     description: "Sekai Stickers built in discord originally from github.com/TheOriginalAyaka",
-    authors: [Devs.MaiKokain],
     dependencies: ["ChatInputButtonAPI"],
+    tags: ["Chat", "Emotes"],
+    authors: [Devs.MaiKokain],
     settings,
-    renderChatBarButton: SekaiStickerChatButton,
+    chatBarButton: {
+        icon: kanadeSvg,
+        render: SekaiStickerChatButton
+    },
     async start() {
         const fonts = [{ name: "YurukaStd", url: "https://raw.githubusercontent.com/TheOriginalAyaka/sekai-stickers/47a2ca33b8cb35f59800e8faad48980e4ce5ea71/src/fonts/YurukaStd.woff2" }, { name: "SSFangTangTi", url: "https://raw.githubusercontent.com/TheOriginalAyaka/sekai-stickers/main/src/fonts/ShangShouFangTangTi.woff2" }];
         if (!IS_FONTS_LOADED) {

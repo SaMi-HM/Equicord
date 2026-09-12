@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { classNameFactory } from "@api/Styles";
 import type { FFmpeg } from "@ffmpeg/ffmpeg";
+import { classNameFactory } from "@utils/css";
 import { waitFor } from "@webpack";
 import { React } from "@webpack/common";
 
@@ -14,7 +14,7 @@ import { FFmpegState } from "./types";
 export const cl = classNameFactory("vc-more-stickers-");
 export const clPicker = (className: string, ...args: any[]) => cl("picker-" + className, ...args);
 
-const CORS_PROXY = "https://corsproxy.io/?url=";
+const CORS_PROXY = "https://cors.keiran0.workers.dev?url=";
 
 function corsUrl(url: string | URL) {
     return CORS_PROXY + encodeURIComponent(url.toString());
@@ -54,12 +54,16 @@ export async function loadFFmpeg(ffmpeg: FFmpeg, setLoaded: () => void) {
     const classWorkerBlob = new Blob([(new TextEncoder()).encode(classWorkerRaw)], { type: "text/javascript" });
     const classWorkerUrl = URL.createObjectURL(classWorkerBlob);
 
-    await ffmpeg.load({
-        coreURL: `${baseURL}/ffmpeg-core.js`,
-        wasmURL: `${baseURL}/ffmpeg-core.wasm`,
-        workerURL: `${baseURL}/ffmpeg-core.worker.js`,
-        classWorkerURL: classWorkerUrl,
-    });
+    try {
+        await ffmpeg.load({
+            coreURL: `${baseURL}/ffmpeg-core.js`,
+            wasmURL: `${baseURL}/ffmpeg-core.wasm`,
+            workerURL: `${baseURL}/ffmpeg-core.worker.js`,
+            classWorkerURL: classWorkerUrl,
+        });
+    } finally {
+        URL.revokeObjectURL(classWorkerUrl);
+    }
     setLoaded();
     console.log("FFmpeg loaded!");
 }

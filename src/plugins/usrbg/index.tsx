@@ -16,11 +16,15 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { definePluginSettings, Settings } from "@api/Settings";
-import { Link } from "@components/Link";
+import "./styles.css";
+
+import { definePluginSettings } from "@api/Settings";
+import { Button } from "@components/Button";
 import { Devs } from "@utils/constants";
+import { classNameFactory } from "@utils/css";
 import definePlugin, { OptionType } from "@utils/types";
 
+const cl = classNameFactory("vc-usrbg-");
 const API_URL = "https://usrbg.is-hardly.online/users";
 
 interface UsrbgApiReturn {
@@ -50,43 +54,52 @@ const settings = definePluginSettings({
 export default definePlugin({
     name: "USRBG",
     description: "Displays user banners from USRBG, allowing anyone to get a banner without Nitro",
+    tags: ["Appearance", "Customisation"],
     authors: [Devs.AutumnVN, Devs.katlyn, Devs.pylix, Devs.TheKodeToad],
     settings,
     patches: [
         {
-            find: '.banner)==null?"COMPLETE"',
+            find: ':"SHOULD_LOAD");',
             replacement: {
-                match: /(?<=void 0:)\i.getPreviewBanner\(\i,\i,\i\)/,
+                match: /\i(?:\?)?.getPreviewBanner\(\i,\i,\i\)(?=.{0,100}"COMPLETE")/,
                 replace: "$self.patchBannerUrl(arguments[0])||$&"
 
             }
         },
         {
             find: "\"data-selenium-video-tile\":",
-            predicate: () => !Settings.plugins.FullVCPFP.enabled && settings.store.voiceBackground,
             replacement: [
                 {
                     match: /(?<=function\((\i),\i\)\{)(?=let.{20,40},style:)/,
-                    replace: "$1.style=$self.getVoiceBackgroundStyles($1);"
+                    replace: "Object.assign($1.style=$1.style||{},$self.getVoiceBackgroundStyles($1));"
                 }
             ]
+        },
+        {
+            find: ".VIDEO_TILE_BACKGROUND,primaryColor:",
+            predicate: () => settings.store.voiceBackground,
+            replacement: {
+                match: /backgroundColor:.{0,25},\{style:(?=\i\?)/,
+                replace: "$&$self.userHasBackground(arguments[0]?.userId)?null:",
+            }
         }
     ],
 
     data: null as UsrbgApiReturn | null,
 
-    settingsAboutComponent: () => {
-        return (
-            <Link href="https://github.com/AutumnVN/usrbg#how-to-request-your-own-usrbg-banner">CLICK HERE TO GET YOUR OWN BANNER</Link>
-        );
-    },
+    settingsAboutComponent: () => (
+        <Button
+            variant="link"
+            className={cl("settings-button")}
+            onClick={() => VencordNative.native.openExternal("https://github.com/AutumnVN/usrbg#how-to-request-your-own-usrbg-banner")}
+        >
+            Get your own USRBG banner
+        </Button>
+    ),
 
     getVoiceBackgroundStyles({ className, participantUserId }: any) {
-        if (className.includes("tile_")) {
+        if (className.includes("tile")) {
             if (this.userHasBackground(participantUserId)) {
-                document.querySelectorAll('[class*="background_"]').forEach(element => {
-                    (element as HTMLElement).style.backgroundColor = "transparent";
-                });
                 return {
                     backgroundImage: `url(${this.getImageUrl(participantUserId)})`,
                     backgroundSize: "cover",

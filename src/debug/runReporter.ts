@@ -4,12 +4,12 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { addPatch } from "@api/PluginManager";
+import { initWs } from "@plugins/devCompanion.dev/initWs";
 import { Logger } from "@utils/Logger";
 import * as Webpack from "@webpack";
-import { initWs } from "plugins/devCompanion.dev/initWs";
-import { getBuildNumber, patchTimings } from "webpack/patchWebpack";
+import { getBuildNumber, patches, patchTimings } from "@webpack/patcher";
 
-import { addPatch, patches } from "../plugins";
 import { loadLazyChunks } from "./loadLazyChunks";
 import { reporterData } from "./reporterData";
 
@@ -19,27 +19,33 @@ async function runReporter() {
     try {
         ReporterLogger.log("Starting test...");
 
-        const { promise: loadLazyChunksDone, resolve: loadLazyChunksResolve } = Promise.withResolvers<void>();
+        const { promise: loadLazyChunksDone, resolve: loadLazyChunksDoneResolve } = Promise.withResolvers<void>();
 
         // The main patch for starting the reporter chunk loading
         addPatch({
             find: '"Could not find app-mount"',
             replacement: {
-                match: /(?<="use strict";)/,
-                replace: "Vencord.Webpack._initReporter();"
+                match: /"Could not find app-mount"/,
+                replace: "(Vencord.Webpack._initReporter(),$&)"
             }
         }, "Equicord Reporter");
 
+        // initReporter is called in the patched entry point of Discord
         // @ts-expect-error
         Vencord.Webpack._initReporter = function () {
-            // initReporter is called in the patched entry point of Discord
-            // setImmediate to only start searching for lazy chunks after Discord initialized the app
-            setTimeout(() => loadLazyChunks().then(loadLazyChunksResolve), 0);
+            loadLazyChunks().then(loadLazyChunksDoneResolve);
         };
 
         await loadLazyChunksDone;
 
-        if (IS_REPORTER && IS_WEB && !IS_VESKTOP) {
+        // Manually require all modules to make sure all lazily required modules are patched
+        for (const moduleId of Object.keys(Webpack.wreq.m)) {
+            try {
+                Webpack.wreq(moduleId);
+            } catch { }
+        }
+
+        if (IS_REPORTER && IS_WEB && !IS_VESKTOP && !IS_EQUIBOP) {
             console.log("[REPORTER_META]", {
                 buildNumber: getBuildNumber(),
                 buildHash: window.GLOBAL_ENV.SENTRY_TAGS.buildId
@@ -55,7 +61,7 @@ async function runReporter() {
         }
 
         for (const [plugin, moduleId, match, totalTime] of patchTimings) {
-            if (totalTime > 5) {
+            if (totalTime > 10) {
                 new Logger("WebpackPatcher").warn(`Patch by ${plugin} took ${Math.round(totalTime * 100) / 100}ms (Module id is ${String(moduleId)}): ${match}`);
             }
         }
@@ -70,7 +76,6 @@ async function runReporter() {
                 else method = "find";
             }
             if (searchType === "waitForStore") method = "findStore";
-            if (searchType === "waitForStore" && args[0] === "PermissionStore") continue;
 
             let result: any;
             try {
@@ -125,7 +130,7 @@ async function runReporter() {
 }
 
 // Imported in webpack for reporterData, wrap to avoid running reporter
-// Run after the Vencord object has been created.
-// We need to add extra properties to it, and it is only created after all of Vencord code has ran
+// Run after the Equicord object has been created.
+// We need to add extra properties to it, and it is only created after all of Equicord code has ran
 if (IS_REPORTER)
     setTimeout(runReporter, 0);

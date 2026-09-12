@@ -103,6 +103,7 @@ const settings = definePluginSettings({
     },
     preferUDP: {
         type: OptionType.BOOLEAN,
+        displayName: "Prefer UDP",
         description: "Enable if you use an older build of XSOverlay unable to connect through websockets. This setting is ignored on web.",
         default: false,
         disabled: () => IS_WEB
@@ -119,11 +120,13 @@ const settings = definePluginSettings({
     },
     dmNotifications: {
         type: OptionType.BOOLEAN,
+        displayName: "DM Notifications",
         description: "Allow Direct Message notifications",
         default: true
     },
     groupDmNotifications: {
         type: OptionType.BOOLEAN,
+        displayName: "Group DM Notifications",
         description: "Allow Group DM notifications",
         default: true
     },
@@ -175,7 +178,7 @@ let socket: WebSocket;
 
 async function start() {
     if (socket) socket.close();
-    socket = new WebSocket(`ws://127.0.0.1:${settings.store.webSocketPort ?? 42070}/?client=Vencord`);
+    socket = new WebSocket(`ws://127.0.0.1:${settings.store.webSocketPort ?? 42070}/?client=Equicord`);
     return new Promise((resolve, reject) => {
         socket.onopen = resolve;
         socket.onerror = reject;
@@ -188,8 +191,9 @@ const Native = VencordNative.pluginHelpers.XSOverlay as PluginNative<typeof impo
 export default definePlugin({
     name: "XSOverlay",
     description: "Forwards discord notifications to XSOverlay, for easy viewing in VR",
+    tags: ["Notifications"],
     authors: [Devs.Nyako],
-    tags: ["vr", "notify"],
+    searchTerms: ["vr", "notify"],
     reporterTestable: ReporterTestable.None,
     settings,
 
@@ -214,7 +218,6 @@ export default definePlugin({
                 const guild = GuildStore.getGuild(channel.guild_id);
                 titleString = `${message.author.username} (${guild.name}, #${channel.name})`;
             }
-
 
             switch (channel.type) {
                 case ChannelTypes.DM:
@@ -248,7 +251,6 @@ export default definePlugin({
                 typeof e?.content_type === "string"
                 && e?.content_type.startsWith("image")
             );
-
 
             images.forEach(img => {
                 finalMsg += ` [image: ${img.filename}] `;
@@ -301,6 +303,7 @@ export default definePlugin({
 
     stop() {
         socket.close();
+        Native.closeSocket();
     },
 
     settingsAboutComponent: () => (

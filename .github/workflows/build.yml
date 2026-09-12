@@ -10,7 +10,8 @@ env:
     REPO: Equicord/Equibored
     USERNAME: GitHub-Actions
 
-permissions: write-all
+permissions:
+    contents: write
 
 jobs:
     Build:
@@ -18,14 +19,14 @@ jobs:
         runs-on: ubuntu-latest
 
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v7
 
-            - uses: pnpm/action-setup@v3
+            - uses: pnpm/action-setup@v6
 
-            - name: Use Node.js 20
-              uses: actions/setup-node@v4
+            - name: Use Node.js 24
+              uses: actions/setup-node@v6
               with:
-                  node-version: 20
+                  node-version: 24
                   cache: "pnpm"
 
             - name: Install dependencies
@@ -39,10 +40,10 @@ jobs:
 
             - name: Generate plugin lists
               run: |
-                pnpm generatePluginJson dist/plugins.json
-                pnpm generateEquicordPluginJson dist/equicordplugins.json
-                pnpm generateVencordPluginJson dist/vencordplugins.json
-                pnpm generateDevsList dist/devs.json
+                  pnpm generatePluginJson dist/plugins.json
+                  pnpm generateEquicordPluginJson dist/equicordplugins.json
+                  pnpm generateVencordPluginJson dist/vencordplugins.json
+                  pnpm generateDevsList dist/devs.json
 
             - name: Collect files to be released
               run: |
@@ -50,9 +51,9 @@ jobs:
                   mkdir release
 
                   cp browser/browser.* release
-                  cp Vencord.user.{js,js.LEGAL.txt} release
+                  cp Equicord.user.{js,js.LEGAL.txt} release
 
-                  # copy the plugin data jsons, the extension zips and the desktop/vesktop asars
+                  # copy the plugin data jsons, the extension zips and the desktop/equibop asars
                   cp *.{json,zip,asar} release
 
                   # legacy un-asared files
@@ -67,10 +68,12 @@ jobs:
                   rm release/*.map
 
             - name: Upload Equicord Stable
+              if: ${{ vars.ACT == 'false' }}
               run: |
                   gh release upload latest --clobber dist/release/*
 
             - name: Upload Plugin JSONs to Equibored repo
+              if: github.repository == 'Equicord/Equicord' && vars.ACT == 'false'
               run: |
                   git config --global user.name "GitHub-Actions"
                   git config --global user.email actions@github.com
@@ -78,6 +81,7 @@ jobs:
                   cd plugins
 
                   cp ../dist/release/*plugins.json .
+                  cp ../dist/release/devs.json .
                   git add -A
 
                   git commit -m "Plugins for https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA"

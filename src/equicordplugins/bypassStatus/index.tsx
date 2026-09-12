@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { playAudio } from "@api/AudioPlayer";
 import { type NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { Notifications } from "@api/index";
 import { definePluginSettings } from "@api/Settings";
@@ -21,14 +22,30 @@ interface IMessageCreate {
     message: Message;
 }
 
-function Icon(enabled?: boolean): JSX.Element {
-    return <svg
-        width="18"
-        height="18"
-    >
-        <circle cx="9" cy="9" r="8" fill={!enabled ? "var(--status-danger)" : "currentColor"} />
-        <circle cx="9" cy="9" r="3.75" fill={!enabled ? "white" : "black"} />
-    </svg>;
+const SILENT_PING_FLAG = 1 << 12;
+
+function DisabledIcon(): JSX.Element {
+    return (
+        <svg
+            width="18"
+            height="18"
+        >
+            <circle cx="9" cy="9" r="8" fill="var(--status-danger)" />
+            <circle cx="9" cy="9" r="3.75" fill="white" />
+        </svg>
+    );
+}
+
+function EnabledIcon(): JSX.Element {
+    return (
+        <svg
+            width="18"
+            height="18"
+        >
+            <circle cx="9" cy="9" r="8" fill="currentColor" />
+            <circle cx="9" cy="9" r="3.75" fill="black" />
+        </svg>
+    );
 }
 
 function processIds(value: string): string {
@@ -59,7 +76,7 @@ async function showNotification(message: Message, guildId: string | undefined): 
         });
 
         if (settings.store.notificationSound) {
-            new Audio("https://discord.com/assets/9422aef94aa931248105.mp3").play();
+            playAudio("message1");
         }
     } catch (error) {
         new Logger("BypassStatus").error("Failed to notify user: ", error);
@@ -77,7 +94,8 @@ function ContextCallback(name: "guild" | "user" | "channel"): NavContextMenuPatc
                 <Menu.MenuItem
                     id={`status-${name}-bypass`}
                     label={`${enabled ? "Remove" : "Add"} Status Bypass`}
-                    icon={() => Icon(enabled)}
+                    icon={enabled ? EnabledIcon : DisabledIcon}
+                    leadingAccessory={{ type: "icon", icon: enabled ? EnabledIcon : DisabledIcon }}
                     action={() => {
                         let bypasses: string[] = settings.store[`${name}s`].split(", ");
                         if (enabled) bypasses = bypasses.filter(id => id !== type.id);
@@ -121,6 +139,11 @@ const settings = definePluginSettings({
         description: "Whether the notification sound should be played",
         default: true,
     },
+    respectSilentPings: {
+        type: OptionType.BOOLEAN,
+        description: "Respect silent pings (@silent / suppress notifications)",
+        default: true
+    },
     statusToUse: {
         type: OptionType.SELECT,
         description: "Status to use for whitelist",
@@ -149,7 +172,9 @@ const settings = definePluginSettings({
 export default definePlugin({
     name: "BypassStatus",
     description: "Still get notifications from specific sources when in do not disturb mode. Right-click on users/channels/guilds to set them to bypass do not disturb mode.",
+    tags: ["Activity", "Customisation", "Notifications", "Servers"],
     authors: [Devs.Inbestigator],
+    dependencies: ["AudioPlayerAPI"],
     flux: {
         async MESSAGE_CREATE({ message, guildId, channelId }: IMessageCreate): Promise<void> {
             try {
@@ -159,6 +184,7 @@ export default definePlugin({
                 if (message.state === "SENDING" || message.content === "" || message.author.id === currentUser.id || (channelId === currentChannelId && WindowStore.isFocused()) || userStatus !== settings.store.statusToUse) {
                     return;
                 }
+                if (settings.store.respectSilentPings && (message.flags & SILENT_PING_FLAG)) { return; }
                 const mentioned = MessageStore.getMessage(channelId, message.id)?.mentioned;
                 if ((settings.store.guilds.split(", ").includes(guildId) || settings.store.channels.split(", ").includes(channelId)) && mentioned) {
                     await showNotification(message, guildId);

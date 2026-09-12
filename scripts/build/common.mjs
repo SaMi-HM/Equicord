@@ -26,22 +26,22 @@ import esbuild, { build, context } from "esbuild";
 import { constants as FsConstants, readFileSync } from "fs";
 import { access, readdir, readFile } from "fs/promises";
 import { minify as minifyHtml } from "html-minifier-terser";
-import { dirname, join, relative } from "path";
+import { dirname, join, relative, resolve } from "path";
 import { fileURLToPath } from "url";
 import { promisify } from "util";
 
 import { getPluginTarget } from "../utils.mjs";
-import { builtinModules } from "module";
 
 const PackageJSON = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../package.json"), "utf-8"));
 
 export const VERSION = PackageJSON.version;
 // https://reproducible-builds.org/docs/source-date-epoch/
-export const BUILD_TIMESTAMP = Number(process.env.SOURCE_DATE_EPOCH) || Date.now();
+export const BUILD_TIMESTAMP = Number(process.env.SOURCE_DATE_EPOCH) * 1000 || Date.now();
 
 export const watch = process.argv.includes("--watch");
 export const IS_DEV = watch || process.argv.includes("--dev");
 export const IS_REPORTER = process.argv.includes("--reporter");
+export const IS_ANTI_CRASH_TEST = process.argv.includes("--anti-crash-test");
 export const IS_STANDALONE = process.argv.includes("--standalone");
 export const IS_COMPANION_TEST = IS_REPORTER && process.argv.includes("--companion-test");
 if (!IS_COMPANION_TEST && process.argv.includes("--companion-test"))
@@ -79,11 +79,12 @@ export async function buildOrWatchAll(buildConfigs) {
             context(cfg).then(ctx => ctx.watch())
         ));
     } else {
-        await Promise.all(buildConfigs.map(cfg => build(cfg)))
-            .catch(error => {
+        for (const cfg of buildConfigs) {
+            await build(cfg).catch(error => {
                 console.error(error.message);
-                process.exit(1); // exit immediately to skip the rest of the builds
+                process.exit(1);
             });
+        }
     }
 }
 
@@ -146,7 +147,7 @@ export const globPlugins = kind => ({
         });
 
         build.onLoad({ filter, namespace: "import-plugins" }, async () => {
-            const pluginDirs = ["plugins/_api", "plugins/_core", "plugins", "userplugins", "equicordplugins"];
+            const pluginDirs = ["plugins/_api", "plugins/_core", "plugins", "equicordplugins/_api", "equicordplugins/_core", "equicordplugins", "userplugins"];
             let code = "";
             let pluginsCode = "\n";
             let metaCode = "\n";
@@ -162,6 +163,7 @@ export const globPlugins = kind => ({
                     const fileName = file.name;
                     if (fileName.startsWith("_") || fileName.startsWith(".")) continue;
                     if (fileName === "index.ts") continue;
+                    if (/\.(zip|rar|7z|tar|gz|bz2)/.test(fileName)) continue;
 
                     const target = getPluginTarget(fileName);
 
@@ -169,6 +171,7 @@ export const globPlugins = kind => ({
                         const excluded =
                             (target === "dev" && !IS_DEV) ||
                             (target === "web" && kind === "discordDesktop") ||
+                            (target === "browser" && kind !== "web") ||
                             (target === "desktop" && kind === "web") ||
                             (target === "discordDesktop" && kind !== "discordDesktop") ||
                             (target === "vesktop" && kind !== "vesktop" && kind !== "equibop") ||
@@ -193,7 +196,8 @@ export const globPlugins = kind => ({
             code += `export default {${pluginsCode}};export const PluginMeta={${metaCode}};export const ExcludedPlugins={${excludedCode}};`;
             return {
                 contents: code,
-                resolveDir: "./src"
+                resolveDir: "./src",
+                watchDirs: pluginDirs.map(d => resolve("src", d)),
             };
         });
     }
@@ -258,7 +262,7 @@ export const fileUrlPlugin = {
         build.onLoad({ filter, namespace: "file-uri" }, async ({ pluginData: { path, uri } }) => {
             const { searchParams } = new URL(uri);
             const base64 = searchParams.has("base64");
-            const minify = IS_STANDALONE === true && searchParams.has("minify");
+            const minify = searchParams.has("minify");
             const noTrim = searchParams.get("trim") === "false";
 
             const encoding = base64 ? "base64" : "utf-8";
@@ -291,7 +295,7 @@ export const fileUrlPlugin = {
                     throw new Error(`Don't know how to minify file type: ${path}`);
                 }
 
-                if (base64)
+                if (base64 && !content.startsWith("data:"))
                     content = Buffer.from(content).toString("base64");
             }
 

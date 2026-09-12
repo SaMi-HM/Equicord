@@ -7,13 +7,15 @@
 import "./tidalStyles.css";
 
 import { Settings } from "@api/Settings";
+import { BaseText } from "@components/BaseText";
+import { Flex } from "@components/Flex";
 import { ImageIcon, LinkIcon, OpenExternalIcon } from "@components/Icons";
+import { SeekBar } from "@equicordplugins/musicControls/spotify/SeekBar";
 import { debounce } from "@shared/debounce";
-import { openImageModal } from "@utils/discord";
-import { classes, copyWithToast } from "@utils/misc";
-import { ContextMenuApi, Flex, FluxDispatcher, Forms, Menu, React, useEffect, useState, useStateFromStores } from "@webpack/common";
+import { copyWithToast, openImageModal } from "@utils/discord";
+import { classes } from "@utils/misc";
+import { ContextMenuApi, FluxDispatcher, Menu, React, useEffect, useState, useStateFromStores } from "@webpack/common";
 
-import { SeekBar } from "../spotify/SeekBar";
 import { type PlayerState, type Repeat, TidalStore } from "./TidalStore";
 
 const cl = (className: string) => `eq-tdl-${className}`;
@@ -80,6 +82,7 @@ function CopyContextMenu({ name, path }: { name: string; path: string; }) {
                 label={`Copy ${name} Link`}
                 action={() => copyWithToast(path.replace("http://", "https://"))}
                 icon={LinkIcon}
+                leadingAccessory={{ type: "icon", icon: LinkIcon }}
             />
             <Menu.MenuItem
                 key={openId}
@@ -87,6 +90,7 @@ function CopyContextMenu({ name, path }: { name: string; path: string; }) {
                 label={`Open ${name} in Tidal`}
                 action={() => TidalStore.openExternal(path)}
                 icon={OpenExternalIcon}
+                leadingAccessory={{ type: "icon", icon: OpenExternalIcon }}
             />
         </Menu.Menu>
     );
@@ -179,13 +183,14 @@ function TdlSeekBar() {
 
     return (
         <div id={cl("progress-bar")}>
-            <Forms.FormText
-                variant="text-xs/medium"
+            <BaseText
+                size="xs"
+                weight="medium"
                 className={`${cl("progress-time")} ${cl("time-left")}`}
                 aria-label="Progress"
             >
                 {msToHuman(position)}
-            </Forms.FormText>
+            </BaseText>
             <SeekBar
                 initialValue={position}
                 minValue={0}
@@ -194,13 +199,14 @@ function TdlSeekBar() {
                 asValueChanges={onChange}
                 onValueRender={msToHuman}
             />
-            <Forms.FormText
-                variant="text-xs/medium"
+            <BaseText
+                size="xs"
+                weight="medium"
                 className={`${cl("progress-time")} ${cl("time-right")}`}
                 aria-label="Total Duration"
             >
                 {msToHuman(songDuration * 1000)}
-            </Forms.FormText>
+            </BaseText>
         </div>
     );
 }
@@ -218,6 +224,7 @@ function AlbumContextMenu({ track }: { track: PlayerState["track"]; }) {
                 label="View Album Cover"
                 action={() => track?.imageSrc && openImageModal({ url: track.imageSrc })}
                 icon={ImageIcon}
+                leadingAccessory={{ type: "icon", icon: ImageIcon }}
             />
             <Menu.MenuControlItem
                 id="tdl-volume"
@@ -279,25 +286,26 @@ function Info({ track }: { track: NonNullable<PlayerState["track"]>; }) {
         <div id={cl("info-wrapper")}>
             {i}
             <div id={cl("titles")}>
-                <Forms.FormText
-                    variant="text-sm/semibold"
+                <BaseText
+                    size="sm"
+                    weight="semibold"
                     id={cl("song-title")}
                     className={cl("ellipoverflow")}
                     title={track?.name}
                     {...makeLinkProps(`"${track.name}"`, track?.id, track?.url || `https://tidal.com/track/${track?.id}`)}
                 >
                     {track?.name}
-                </Forms.FormText>
+                </BaseText>
                 {track.artist && (
-                    <Forms.FormText variant="text-sm/normal" className={cl("ellipoverflow")}>
+                    <BaseText size="sm" className={cl("ellipoverflow")}>
                         by&nbsp;
                         <span className={cl("artist")} style={{ fontSize: "inherit" }} title={track.artist}>
                             {track.artist}
                         </span>
-                    </Forms.FormText>
+                    </BaseText>
                 )}
                 {track.album && (
-                    <Forms.FormText variant="text-sm/normal" className={cl("ellipoverflow")}>
+                    <BaseText size="sm" className={cl("ellipoverflow")}>
                         on&nbsp;
                         <span
                             id={cl("album-title")}
@@ -307,7 +315,7 @@ function Info({ track }: { track: NonNullable<PlayerState["track"]>; }) {
                         >
                             {track.album}
                         </span>
-                    </Forms.FormText>
+                    </BaseText>
                 )}
             </div>
         </div>
@@ -322,7 +330,6 @@ export function TidalPlayer() {
 
     const isPlaying = useStateFromStores([TidalStore], () => TidalStore.isPlaying);
     const [shouldHide, setShouldHide] = useState(false);
-
 
     React.useEffect(() => {
         setShouldHide(false);
@@ -346,4 +353,3 @@ export function TidalPlayer() {
         </div>
     );
 }
-

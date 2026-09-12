@@ -4,28 +4,22 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { migratePluginSettings } from "@api/Settings";
-import { EquicordDevs } from "@utils/constants";
-import { openUserProfile } from "@utils/discord";
+import { Devs } from "@utils/constants";
 import definePlugin from "@utils/types";
-import { User } from "@vencord/discord-types";
 
-migratePluginSettings("AlwaysExpandProfiles", "AlwaysExpandProfile");
 export default definePlugin({
     name: "AlwaysExpandProfiles",
     description: "Always expands profile popouts to the full modal",
-    authors: [EquicordDevs.thororen],
+    tags: ["Appearance", "Utility"],
+    authors: [Devs.thororen],
     patches: [
         {
             find: '"view-profile"',
             replacement: {
-                match: /(user:(\i).*?"PRESS_VIEW_PROFILE".{0,200})return/,
-                replace: "$1return $self.openUserProfile($2);"
+                match: /function (\i)\(\i?\)\{.{0,45}\(0,\i\.openUserProfileModal.{0,300}(?=return)/,
+                replace: "$&return $1();"
             },
             all: true
         },
     ],
-    openUserProfile(user: User) {
-        openUserProfile(user.id);
-    }
 });

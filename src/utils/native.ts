@@ -19,8 +19,10 @@
 export function relaunch() {
     if (IS_DISCORD_DESKTOP)
         window.DiscordNative.app.relaunch();
-    else
+    else if (IS_VESKTOP || IS_EQUIBOP)
         window.VesktopNative.app.relaunch();
+    else
+        location.reload();
 }
 
 export function showItemInFolder(path: string) {

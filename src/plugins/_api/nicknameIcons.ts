@@ -13,11 +13,17 @@ export default definePlugin({
     authors: [Devs.Nuckyz],
     patches: [
         {
-            find: "#{intl::USER_PROFILE_LOAD_ERROR}",
-            replacement: {
-                match: /(\.fetchError.+?\?)null/,
-                replace: (_, rest) => `${rest}Vencord.Api.NicknameIcons._renderIcons(arguments[0])`
-            }
+            find: "#{intl::USER_PROFILE_PRONOUNS}",
+            replacement: [
+                {
+                    match: /(?<=children:\i\}\):\i,)null!=\i/,
+                    replace: "($&||!!Vencord.Api.NicknameIcons._renderIcons({userId:arguments[0].user?.id})?.length)"
+                },
+                {
+                    match: /(?<=shouldUnderlineOnHover:null.{0,300})children:(\i)(?=\}\)\])/,
+                    replace: "children:[...Vencord.Api.NicknameIcons._renderIcons({userId:arguments[0].user?.id}),$1]"
+                }
+            ]
         }
     ]
 });

@@ -6,7 +6,7 @@
 
 import "./style.css";
 
-import { EquicordDevs } from "@utils/constants";
+import { Devs, EquicordDevs } from "@utils/constants";
 import definePlugin from "@utils/types";
 import { Channel } from "@vencord/discord-types";
 import { GuildStore, React, SelectedGuildStore } from "@webpack/common";
@@ -32,7 +32,8 @@ function renderBadge(id: number, title: string) {
 export default definePlugin({
     name: "ChannelBadges",
     description: "Adds badges to channels based on their type",
-    authors: [EquicordDevs.creations, EquicordDevs.thororen],
+    tags: ["Appearance", "Customisation", "Servers"],
+    authors: [EquicordDevs.creations, Devs.thororen],
     settings,
     patches: [
         // TY TypingIndicator
@@ -46,7 +47,7 @@ export default definePlugin({
         },
         // Threads
         {
-            find: "spineWithGuildIcon]:",
+            find: "18V16H9v2H6Zm3",
             replacement: {
                 match: /mentionsCount:\i.+?null(?<=channel:(\i).+?)/,
                 replace: "$&,$self.renderChannelBadges($1)"

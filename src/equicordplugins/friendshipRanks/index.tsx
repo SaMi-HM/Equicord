@@ -4,23 +4,36 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { BadgeUserArgs, ProfileBadge } from "@api/Badges";
-import { Badges } from "@api/index";
-import ErrorBoundary from "@components/ErrorBoundary";
-import { Devs } from "@utils/constants";
-import { Margins } from "@utils/margins";
-import { ModalContent, ModalHeader, ModalRoot, ModalSize, openModal } from "@utils/modal";
-import definePlugin from "@utils/types";
-import { Button, Flex, Forms, RelationshipStore } from "@webpack/common";
+import "./styles.css";
 
-import { bestiesIcon, bloomingIcon, burningIcon, fighterIcon, royalIcon, sproutIcon, starIcon } from "./icons";
+import { BadgePosition, BadgeUserArgs } from "@api/Badges";
+import { Badges } from "@api/index";
+import { definePluginSettings } from "@api/Settings";
+import ErrorBoundary from "@components/ErrorBoundary";
+import { Flex } from "@components/Flex";
+import { Paragraph } from "@components/Paragraph";
+import { Devs, EquicordDevs } from "@utils/constants";
+import { classNameFactory } from "@utils/css";
+import definePlugin, { OptionType } from "@utils/types";
+import { RenderModalProps } from "@vencord/discord-types";
+import { Forms, Modal, openModal, RelationshipStore, Tooltip, useStateFromStores } from "@webpack/common";
 
 interface rankInfo {
     title: string;
     description: string;
     requirement: number;
-    assetSVG: any;
+    iconSrc: string;
 }
+
+const cl = classNameFactory("vc-friendship-ranks-");
+
+const settings = definePluginSettings({
+    showFriendsInChat: {
+        type: OptionType.BOOLEAN,
+        description: "Show a friend icon on messages from friends.",
+        default: false,
+    },
+});
 
 function daysSince(dateString: string): number {
     const date = new Date(dateString);
@@ -39,86 +52,72 @@ const ranks: rankInfo[] =
             title: "Sprout",
             description: "Your friendship is just starting",
             requirement: 0,
-            assetSVG: sproutIcon
+            iconSrc: "https://equicord.org/assets/plugins/friendshipRanks/sprout.png"
         },
         {
             title: "Blooming",
             description: "Your friendship is getting there! (1 Month)",
             requirement: 30,
-            assetSVG: bloomingIcon
+            iconSrc: "https://equicord.org/assets/plugins/friendshipRanks/blooming.png"
         },
         {
             title: "Burning",
             description: "Your friendship has reached terminal velocity (3 Months)",
             requirement: 90,
-            assetSVG: burningIcon
+            iconSrc: "https://equicord.org/assets/plugins/friendshipRanks/burning.png"
         },
         {
             title: "Fighter",
             description: "Your friendship is strong (6 Months)",
             requirement: 182.5,
-            assetSVG: fighterIcon
+            iconSrc: "https://equicord.org/assets/plugins/friendshipRanks/fighter.png"
         },
         {
             title: "Star",
             description: "Your friendship has been going on for a WHILE (1 Year)",
             requirement: 365,
-            assetSVG: starIcon
+            iconSrc: "https://equicord.org/assets/plugins/friendshipRanks/star.png"
         },
         {
             title: "Royal",
             description: "Your friendship has gone through thick and thin- a whole 2 years!",
             requirement: 730,
-            assetSVG: royalIcon
+            iconSrc: "https://equicord.org/assets/plugins/friendshipRanks/royal.png"
         },
         {
             title: "Besties",
             description: "How do you even manage this??? (5 Years)",
             requirement: 1826.25,
-            assetSVG: bestiesIcon
+            iconSrc: "https://equicord.org/assets/plugins/friendshipRanks/besties.png"
         }
     ];
 
 function openRankModal(rank: rankInfo) {
-    openModal(props => (
+    openModal((props: RenderModalProps) => (
         <ErrorBoundary>
-            <ModalRoot {...props} size={ModalSize.DYNAMIC}>
-                <ModalHeader>
-                    <Flex style={{ width: "100%", justifyContent: "center" }}>
+            <Modal
+                {...props}
+                size="sm"
+                title={
+                    <Flex className={cl("flex")}>
                         <Forms.FormTitle
+                            className={cl("img")}
                             tag="h2"
-                            style={{
-                                width: "100%",
-                                textAlign: "center",
-                                margin: 0
-                            }}
                         >
+                            <img src={rank.iconSrc} alt="rank icon" />
                             {rank.title}
                         </Forms.FormTitle>
                     </Flex>
-                </ModalHeader>
-                <ModalContent>
-                    <div style={{ padding: "1em", textAlign: "center" }}>
-                        <rank.assetSVG height="150px"></rank.assetSVG>
-                        <Forms.FormText className={Margins.top16}>
-                            {rank.description}
-                        </Forms.FormText>
-                    </div>
-                </ModalContent>
-            </ModalRoot>
+                }
+            >
+                <div className={cl("text")}>
+                    <Paragraph>
+                        {rank.description}
+                    </Paragraph>
+                </div>
+            </Modal>
         </ErrorBoundary >
     ));
-}
-
-function getBadgeComponent(rank,) {
-    // there may be a better button component to do this with
-    return (
-        <div style={{ transform: "scale(0.80)" }}>
-            <Button onClick={() => openRankModal(rank)} width={"21.69px"} height={"21.69px"} size={Button.Sizes.NONE} look={Button.Looks.BLANK}>
-                <rank.assetSVG height={"21.69px"} />
-            </Button>
-        </div>
-    );
 }
 
 function shouldShowBadge(userId: string, requirement: number, index: number) {
@@ -132,22 +131,52 @@ function shouldShowBadge(userId: string, requirement: number, index: number) {
 }
 
 function getBadgesToApply() {
-    const badgesToApply: ProfileBadge[] = ranks.map((rank, index) => {
-        return (
-            {
-                description: rank.title,
-                component: () => getBadgeComponent(rank),
-                shouldShow: (info: BadgeUserArgs) => shouldShowBadge(info.userId, rank.requirement, index),
-            });
+    return ranks.map((rank, index) => {
+        return ({
+            id: `friendship_ranks_badge_${index}`,
+            description: rank.title,
+            iconSrc: rank.iconSrc,
+            position: BadgePosition.END,
+            onClick: () => openRankModal(rank),
+            shouldShow: (info: BadgeUserArgs) => shouldShowBadge(info.userId, rank.requirement, index),
+            props: {
+                style: {
+                    borderRadius: "50%",
+                    transform: "scale(0.9)"
+                }
+            },
+        });
     });
-
-    return badgesToApply;
 }
+
+const FriendDecoration = ErrorBoundary.wrap(({ userId }: { userId: string; }) => {
+    const isFriend = useStateFromStores([RelationshipStore], () => RelationshipStore.isFriend(userId), [userId]);
+    if (!isFriend) return null;
+
+    return (
+        <Tooltip text="Friend">
+            {tooltipProps => (
+                <span {...tooltipProps} className={cl("decoration")}>
+                    <svg className={cl("icon")} aria-hidden="true" viewBox="0 0 24 24">
+                        <path fill="currentColor" d="M13 10a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" />
+                        <path fill="currentColor" d="M3 5v-.75C3 3.56 3.56 3 4.25 3s1.24.56 1.33 1.25C6.12 8.65 9.46 12 13 12h1a8 8 0 0 1 8 8 2 2 0 0 1-2 2 .21.21 0 0 1-.2-.15 7.65 7.65 0 0 0-1.32-2.3c-.15-.2-.42-.06-.39.17l.25 2c.02.15-.1.28-.25.28H9a2 2 0 0 1-2-2v-2.22c0-1.57-.67-3.05-1.53-4.37A15.85 15.85 0 0 1 3 5Z" />
+                    </svg>
+                </span>
+            )}
+        </Tooltip>
+    );
+}, { noop: true });
 
 export default definePlugin({
     name: "FriendshipRanks",
     description: "Adds badges showcasing how long you have been friends with a user for",
-    authors: [Devs.Samwich],
+    tags: ["Friends"],
+    authors: [Devs.Samwich, EquicordDevs.lucabeyer],
+    settings,
+    renderMessageDecoration({ message }) {
+        if (!settings.store.showFriendsInChat || !message?.author) return null;
+        return <FriendDecoration userId={message.author.id} />;
+    },
     start() {
         getBadgesToApply().forEach(b => Badges.addProfileBadge(b));
 

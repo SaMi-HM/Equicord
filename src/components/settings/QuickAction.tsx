@@ -6,8 +6,8 @@
 
 import "./QuickAction.css";
 
-import { classNameFactory } from "@api/Styles";
-import { Card } from "@webpack/common";
+import { Card } from "@components/Card";
+import { classNameFactory } from "@utils/css";
 import type { ComponentType, PropsWithChildren, ReactNode } from "react";
 
 const cl = classNameFactory("vc-settings-quickActions-");
@@ -17,22 +17,23 @@ export interface QuickActionProps {
     text: ReactNode;
     action?: () => void;
     disabled?: boolean;
+    style?: React.CSSProperties;
 }
 
 export function QuickAction(props: QuickActionProps) {
-    const { Icon, action, text, disabled } = props;
+    const { Icon, action, text, disabled, style } = props;
 
     return (
-        <button className={cl("pill")} onClick={action} disabled={disabled}>
+        <button className={cl("pill")} onClick={action} disabled={disabled} style={style}>
             <Icon className={cl("img")} />
             {text}
         </button>
     );
 }
 
-export function QuickActionCard(props: PropsWithChildren) {
+export function QuickActionCard(props: PropsWithChildren<{ columns?: number; }>) {
     return (
-        <Card className={cl("card")}>
+        <Card className={cl("card")} style={props.columns ? { gridTemplateColumns: `repeat(${props.columns}, 1fr)` } : undefined}>
             {props.children}
         </Card>
     );

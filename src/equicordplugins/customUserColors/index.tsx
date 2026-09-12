@@ -10,24 +10,22 @@ import { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { get } from "@api/DataStore";
 import { definePluginSettings, Settings } from "@api/Settings";
 import { EquicordDevs } from "@utils/constants";
-import { openModal } from "@utils/modal";
 import definePlugin, { OptionType } from "@utils/types";
-import { User } from "@vencord/discord-types";
+import { Channel, User } from "@vencord/discord-types";
 import { extractAndLoadChunksLazy } from "@webpack";
-import { Menu } from "@webpack/common";
+import { ChannelStore, Menu, openModal,SelectedChannelStore } from "@webpack/common";
 
 import { SetColorModal } from "./SetColorModal";
 
 export const DATASTORE_KEY = "equicord-customcolors";
 export let colors: Record<string, string> = {};
 
-
 (async () => {
     colors = await get<Record<string, string>>(DATASTORE_KEY) || {};
 })();
 
 // needed for color picker to be available without opening settings (ty pindms!!)
-const requireSettingsMenu = extractAndLoadChunksLazy(['name:"UserSettings"'], /createPromise:.{0,20}(\i\.\i\("?.+?"?\).*?).then\(\i\.bind\(\i,"?(.+?)"?\)\).{0,50}"UserSettings"/);
+const requireSettingsMenu = extractAndLoadChunksLazy(['type:"USER_SETTINGS_MODAL_OPEN"']);
 const ColorIcon = () => {
     return (
         <svg
@@ -50,22 +48,41 @@ const userContextMenuPatch: NavContextMenuPatchCallback = (children, { user }: {
             label="Set Color"
             id="set-color"
             icon={ColorIcon}
+            leadingAccessory={{ type: "icon", icon: ColorIcon }}
             action={async () => {
                 await requireSettingsMenu();
-                openModal(modalProps => <SetColorModal userId={user.id} modalProps={modalProps} />);
+                openModal(modalProps => <SetColorModal id={user.id} modalProps={modalProps} />);
             }}
         />
     );
 
     children.push(<Menu.MenuSeparator />, setCustomColorItem);
-
 };
 
-export function getCustomColorString(userId: string | undefined, withHash?: boolean): string | undefined {
-    if (!userId) return;
-    if (!colors[userId] || !Settings.plugins.CustomUserColors.enabled) return;
-    if (withHash) return `#${colors[userId]}`;
-    return colors[userId];
+const channelContextMenuPatch: NavContextMenuPatchCallback = (children, { channel }: { channel: Channel; }) => {
+    if (channel?.id == null) return;
+
+    const setCustomColorItem = (
+        <Menu.MenuItem
+            label="Set Color"
+            id="set-color"
+            icon={ColorIcon}
+            leadingAccessory={{ type: "icon", icon: ColorIcon }}
+            action={async () => {
+                await requireSettingsMenu();
+                openModal(modalProps => <SetColorModal id={channel.id} modalProps={modalProps} />);
+            }}
+        />
+    );
+
+    children.push(<Menu.MenuSeparator />, setCustomColorItem);
+};
+
+export function getCustomColorString(id: string | undefined, withHash?: boolean): string | undefined {
+    if (!id) return;
+    if (!colors[id] || !Settings.plugins.CustomUserColors.enabled) return;
+    if (withHash) return `#${colors[id]}`;
+    return colors[id];
 }
 
 const settings = definePluginSettings({
@@ -84,8 +101,12 @@ const settings = definePluginSettings({
 export default definePlugin({
     name: "CustomUserColors",
     description: "Lets you add a custom color to any user, anywhere! Highly recommend to use with typingTweaks and roleColorEverywhere",
+    tags: ["Appearance", "Customisation", "Chat"],
     authors: [EquicordDevs.mochienya],
-    contextMenus: { "user-context": userContextMenuPatch },
+    contextMenus: {
+        "user-context": userContextMenuPatch,
+        "gdm-context": channelContextMenuPatch,
+    },
     settings,
     requireSettingsMenu,
     getCustomColorString,
@@ -105,7 +126,7 @@ export default definePlugin({
         {
             find: "PrivateChannel.renderAvatar",
             replacement: {
-                match: /(withDisplayNameStyles\]:\i\}\),children:\i\}\),)/,
+                match: /(\i\]:\i\}\),children:\i\}\),)(?=.{0,100}isSystemDM\(\))/,
                 replace: "$1style:{color:`${$self.colorDMList(arguments[0])}`},"
             },
             predicate: () => settings.store.dmList,
@@ -118,7 +139,7 @@ export default definePlugin({
                     replace: ",style$1"
                 },
                 {
-                    match: /(?<=nameAndDecorators,)/,
+                    match: /(?<="div",\{className:\i\.\i,)(?=children:\[)/,
                     replace: "style:style||{},"
                 },
             ],
@@ -135,10 +156,12 @@ export default definePlugin({
 
     wrapMessageColorProps(colorProps: { colorString: string, colorStrings?: Record<"primaryColor" | "secondaryColor" | "tertiaryColor", string>; }, context: any) {
         try {
+            const channelId = SelectedChannelStore.getChannelId();
+            const channel = ChannelStore.getChannel(channelId);
+            const isDM = channel.isDM() || channel.isMultiUserDM();
             const colorString = this.colorIfServer(context);
-            if (colorString === colorProps.colorString) {
-                return colorProps;
-            }
+            if (colorString === colorProps.colorString) return colorProps;
+            if (!settings.store.colorInServers && !isDM) return colorProps;
 
             return {
                 ...colorProps,
@@ -156,8 +179,9 @@ export default definePlugin({
     },
 
     colorDMList(context: any): string | undefined {
-        const userId = context?.user?.id;
-        const colorString = getCustomColorString(userId, true);
+        const id = context?.user?.id ?? context?.channel?.id;
+        const colorString = getCustomColorString(id, true);
+
         return colorString ?? "inherit";
     },
 

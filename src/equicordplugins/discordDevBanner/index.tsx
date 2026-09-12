@@ -6,7 +6,7 @@
 
 import "./styles.css";
 
-import { EquicordDevs } from "@utils/constants";
+import { Devs, EquicordDevs } from "@utils/constants";
 import definePlugin from "@utils/types";
 
 import { makeDevBanner, settings } from "./components";
@@ -14,20 +14,21 @@ import { makeDevBanner, settings } from "./components";
 export default definePlugin({
     name: "DiscordDevBanner",
     description: "Enables the Discord developer banner, in which displays the build-ID",
-    authors: [EquicordDevs.KrystalSkull, EquicordDevs.thororen],
+    tags: ["Appearance", "Console", "Developers"],
+    authors: [EquicordDevs.KrystalSkull, Devs.thororen],
     settings,
     patches: [
         {
-            find: ".devBanner,",
+            find: '"isHideDevBanner"',
             replacement: [
                 {
                     match: '"staging"===window.GLOBAL_ENV.RELEASE_CHANNEL',
                     replace: "true"
                 },
                 {
-                    match: /children:\[.*?\{\}\)\]/g,
+                    match: /children:\[.{0,60}(?:#{intl::BUILD_OVERRIDE}|#{intl::uyrfYF::raw}).{0,40}\{\}\)\]/g,
                     replace: "children:$self.makeDevBanner()"
-                },
+                }
             ]
         }
     ],

@@ -4,15 +4,14 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import "@equicordplugins/_misc/styles.css";
-
 import { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { definePluginSettings } from "@api/Settings";
+import { Notice } from "@components/Notice";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
 import { Channel, User, VoiceState } from "@vencord/discord-types";
-import { findByPropsLazy, findStoreLazy } from "@webpack";
-import { Forms, Menu, React, VoiceStateStore } from "@webpack/common";
+import { findByPropsLazy } from "@webpack";
+import { Menu, React, RelationshipStore, UserStore, VoiceStateStore } from "@webpack/common";
 
 type TFollowedUserInfo = {
     lastChannelId: string;
@@ -28,8 +27,6 @@ interface UserContextProps {
 let followedUserInfo: TFollowedUserInfo = null;
 
 const voiceChannelAction = findByPropsLazy("selectVoiceChannel");
-const UserStore = findStoreLazy("UserStore");
-const RelationshipStore = findStoreLazy("RelationshipStore");
 
 const settings = definePluginSettings({
     onlyWhenInVoice: {
@@ -72,17 +69,17 @@ const UserContextMenuPatch: NavContextMenuPatchCallback = (children, { channel, 
     );
 };
 
-
 export default definePlugin({
     name: "FollowVoiceUser",
     description: "Follow a friend in voice chat.",
+    tags: ["Voice"],
     authors: [EquicordDevs.TheArmagan],
     settings,
-    settingsAboutComponent: () => <>
-        <Forms.FormText className="plugin-warning">
+    settingsAboutComponent: () => (
+        <Notice.Info>
             This Plugin is used to follow a Friend/Friends into voice chat(s).
-        </Forms.FormText>
-    </>,
+        </Notice.Info>
+    ),
     flux: {
         async VOICE_STATE_UPDATES({ voiceStates }: { voiceStates: VoiceState[]; }) {
             if (!followedUserInfo) return;
@@ -90,7 +87,7 @@ export default definePlugin({
 
             if (
                 settings.store.onlyWhenInVoice
-                && VoiceStateStore.getVoiceStateForUser(UserStore.getCurrentUser().id) === null
+                && !VoiceStateStore.getVoiceStateForUser(UserStore.getCurrentUser().id)
             ) return;
 
             voiceStates.forEach(voiceState => {

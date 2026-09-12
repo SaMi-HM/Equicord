@@ -20,12 +20,12 @@ import { addMessageAccessory, removeMessageAccessory } from "@api/MessageAccesso
 import { updateMessage } from "@api/MessageUpdater";
 import { definePluginSettings } from "@api/Settings";
 import { getUserSettingLazy } from "@api/UserSettings";
+import { BaseText } from "@components/BaseText";
 import { Devs } from "@utils/constants.js";
-import { classes } from "@utils/misc";
 import { Queue } from "@utils/Queue";
 import definePlugin, { OptionType } from "@utils/types";
 import { Channel, Message } from "@vencord/discord-types";
-import { findByPropsLazy, findComponentByCodeLazy } from "@webpack";
+import { findComponentByCodeLazy, findComponentLazy, findCssClassesLazy } from "@webpack";
 import {
     Button,
     ChannelStore,
@@ -37,22 +37,20 @@ import {
     PermissionsBits,
     PermissionStore,
     RestAPI,
-    Text,
     UserStore
 } from "@webpack/common";
-import { JSX } from "react";
+import { ComponentType, JSX } from "react";
 
 const messageCache = new Map<string, {
     message?: Message;
     fetched: boolean;
 }>();
 
-const Embed = findComponentByCodeLazy(".inlineMediaEmbed");
-const AutoModEmbed = findComponentByCodeLazy(".withFooter]:", "childrenMessageContent:");
+const Embed = findComponentLazy(m => m.prototype?.renderSuppressButton);
 const ChannelMessage = findComponentByCodeLazy("childrenExecutedCommand:", ".hideAccessories");
+let AutoModEmbed: ComponentType<any> = () => null;
 
-const SearchResultClasses = findByPropsLazy("message", "searchResult");
-const EmbedClasses = findByPropsLazy("embedAuthorIcon", "embedAuthor", "embedAuthor");
+const EmbedClasses = findCssClassesLazy("embedAuthorIcon", "embedAuthor", "embedAuthor", "embedMargin");
 
 const MessageDisplayCompact = getUserSettingLazy("textAndImages", "messageDisplayCompact")!;
 
@@ -113,9 +111,11 @@ const settings = definePluginSettings({
         ]
     },
     idList: {
+        displayName: "ID List",
         description: "Guild/channel/user IDs to blacklist or whitelist (separate with comma)",
         type: OptionType.STRING,
-        default: ""
+        default: "",
+        multiline: true,
     },
     clearMessageCache: {
         type: OptionType.COMPONENT,
@@ -126,7 +126,6 @@ const settings = definePluginSettings({
         )
     }
 });
-
 
 async function fetchMessage(channelID: string, messageID: string) {
     const cached = messageCache.get(messageID);
@@ -146,7 +145,7 @@ async function fetchMessage(channelID: string, messageID: string) {
     const msg = res?.body?.[0];
     if (!msg) return;
 
-    const message: Message = MessageStore.getMessages(msg.channel_id).receiveMessage(msg).get(msg.id);
+    const message = MessageStore.getMessages(msg.channel_id).receiveMessage(msg).get(msg.id);
     if (!message) return;
 
     messageCache.set(message.id, {
@@ -156,7 +155,6 @@ async function fetchMessage(channelID: string, messageID: string) {
 
     return message;
 }
-
 
 function getImages(message: Message): Attachment[] {
     const attachments: Attachment[] = [];
@@ -222,7 +220,6 @@ function withEmbeddedBy(message: Message, embeddedBy: string[]) {
         }
     });
 }
-
 
 function MessageEmbedAccessory({ message }: { message: Message; }) {
     // @ts-expect-error
@@ -296,15 +293,20 @@ function ChannelMessageEmbedAccessory({ message, channel }: MessageEmbedProps): 
                 rawDescription: "",
                 color: "var(--background-base-lower)",
                 author: {
-                    name: <Text variant="text-xs/medium" tag="span">
+                    name: <BaseText size="xs" weight="medium" tag="span">
                         <span>{channelLabel} - </span>
                         {Parser.parse(channel.isDM() ? `<@${dmReceiver.id}>` : `<#${channel.id}>`)}
-                    </Text>,
+                    </BaseText>,
                     iconProxyURL: iconUrl
                 }
             }}
             renderDescription={() => (
-                <div key={message.id} className={classes(SearchResultClasses.message, settings.store.messageBackgroundColor && SearchResultClasses.searchResult)}>
+                <div key={message.id} style={!settings.store.messageBackgroundColor ? undefined : {
+                    backgroundColor: "var(--background-base-lower)",
+                    border: "1px solid var(--border-subtle)",
+                    borderRadius: "8px",
+                    paddingBottom: "8px",
+                }}>
                     <ChannelMessage
                         id={`message-link-embeds-${message.id}`}
                         message={message}
@@ -329,7 +331,7 @@ function AutomodEmbedAccessory(props: MessageEmbedProps): JSX.Element | null {
     return <AutoModEmbed
         channel={channel}
         childrenAccessories={
-            <Text color="text-muted" variant="text-xs/medium" tag="span" className={`${EmbedClasses.embedAuthor} ${EmbedClasses.embedMargin}`}>
+            <BaseText size="xs" weight="medium" color="text-muted" tag="span" className={`${EmbedClasses.embedAuthor} ${EmbedClasses.embedMargin}`}>
                 {iconUrl && <img src={iconUrl} className={EmbedClasses.embedAuthorIcon} alt="" />}
                 <span>
                     <span>{channelLabel} - </span>
@@ -338,7 +340,7 @@ function AutomodEmbedAccessory(props: MessageEmbedProps): JSX.Element | null {
                         : Parser.parse(`<#${channel.id}>`)
                     }
                 </span>
-            </Text>
+            </BaseText>
         }
         compact={compact}
         content={
@@ -351,7 +353,7 @@ function AutomodEmbedAccessory(props: MessageEmbedProps): JSX.Element | null {
                     const { width, height } = computeWidthAndHeight(a.width, a.height);
                     return (
                         <div key={idx}>
-                            <img src={a.url} width={width} height={height} />
+                            <img src={a.proxyURL ?? a.url} width={width} height={height} />
                         </div>
                     );
                 })}
@@ -366,10 +368,25 @@ function AutomodEmbedAccessory(props: MessageEmbedProps): JSX.Element | null {
 export default definePlugin({
     name: "MessageLinkEmbeds",
     description: "Adds a preview to messages that link another message",
+    tags: ["Chat", "Appearance"],
     authors: [Devs.TheSun, Devs.Ven, Devs.RyanCaoDev],
     dependencies: ["MessageAccessoriesAPI", "MessageUpdaterAPI", "UserSettingsAPI"],
 
     settings,
+
+    patches: [
+        {
+            find: "!1,withFooter:",
+            replacement: {
+                match: /(?=function (\i)\(\i\){let{message:\i,channel:\i,[^}]+?withFooter:)/,
+                replace: "$self.AutoModEmbed=$1;"
+            }
+        }
+    ],
+
+    set AutoModEmbed(value: any) {
+        AutoModEmbed = value;
+    },
 
     start() {
         addMessageAccessory("MessageLinkEmbeds", props => {

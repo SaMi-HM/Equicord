@@ -4,17 +4,16 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { PickerContent, PickerContentHeader, PickerContentRow, PickerContentRowGrid, PickerHeaderProps, SidebarProps, Sticker, StickerCategoryType, StickerPack } from "@equicordplugins/moreStickers/types";
+import { sendSticker } from "@equicordplugins/moreStickers/upload";
+import { clPicker, FFmpegStateContext } from "@equicordplugins/moreStickers/utils";
 import { debounce } from "@shared/debounce";
-import { ModalContent, ModalHeader, ModalRoot, ModalSize, openModal } from "@utils/modal";
-import { React, Text, TextInput } from "@webpack/common";
+import { Modal,openModal, React, TextInput } from "@webpack/common";
 import { JSX } from "react";
 
-import { PickerContent, PickerContentHeader, PickerContentRow, PickerContentRowGrid, PickerHeaderProps, SidebarProps, Sticker, StickerCategoryType, StickerPack } from "../types";
-import { sendSticker } from "../upload";
-import { clPicker, FFmpegStateContext } from "../utils";
 import { CategoryImage, CategoryScroller, CategoryWrapper, StickerCategory } from "./categories";
 import { CancelIcon, CogIcon, IconContainer, RecentlyUsedIcon, SearchIcon } from "./icons";
-import { addRecentSticker, getRecentStickers, Header, RECENT_STICKERS_ID, RECENT_STICKERS_TITLE, Settings } from "./misc";
+import { addRecentSticker, getRecentStickers, Header, Packs, RECENT_STICKERS_ID, RECENT_STICKERS_TITLE } from "./misc";
 
 const debounceQueryChange = debounce((cb: Function, ...args: any) => cb(...args), 150);
 
@@ -41,7 +40,7 @@ export const PickerSidebar = ({ packMetas, onPackSelect }: SidebarProps) => {
                     }}
                 >
                     <RecentlyUsedIcon width={24} height={24} color={
-                        activePack === RecentPack ? " var(--interactive-active)" : "var(--interactive-normal)"
+                        activePack === RecentPack ? " var(--interactive-icon-active)" : "var(--interactive-icon-default)"
                     } />
                 </StickerCategory>
                 {
@@ -71,14 +70,9 @@ export const PickerSidebar = ({ packMetas, onPackSelect }: SidebarProps) => {
                     onClick={() => {
                         openModal(modalProps => {
                             return (
-                                <ModalRoot size={ModalSize.LARGE} {...modalProps}>
-                                    <ModalHeader>
-                                        <Text tag="h2">Stickers+</Text>
-                                    </ModalHeader>
-                                    <ModalContent>
-                                        <Settings />
-                                    </ModalContent>
-                                </ModalRoot>
+                                <Modal size="lg" title="Stickers+" {...modalProps}>
+                                    <Packs />
+                                </Modal>
                             );
                         });
                     }}
@@ -166,7 +160,6 @@ function PickerContentRow({ rowIndex, grid1, grid2, grid3, channelId }: PickerCo
         </div>
     );
 }
-
 
 function HeaderCollapseIcon({ isExpanded }: { isExpanded: boolean; }) {
     return (
@@ -432,7 +425,6 @@ export function PickerContent({ stickerPacks, selectedStickerPackId, setSelected
         </div>
     );
 }
-
 
 export const PickerHeader = ({ onQueryChange }: PickerHeaderProps) => {
     const [query, setQuery] = React.useState<string | undefined>();

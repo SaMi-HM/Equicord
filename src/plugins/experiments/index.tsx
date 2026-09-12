@@ -5,20 +5,18 @@
  */
 
 import { definePluginSettings } from "@api/Settings";
-import { disableStyle, enableStyle } from "@api/Styles";
+import { BaseText } from "@components/BaseText";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { ErrorCard } from "@components/ErrorCard";
+import { HeadingPrimary, HeadingSecondary } from "@components/Heading";
+import { Paragraph } from "@components/Paragraph";
 import { Devs, IS_MAC } from "@utils/constants";
 import { Margins } from "@utils/margins";
 import definePlugin, { OptionType } from "@utils/types";
-import { findByPropsLazy, findLazy } from "@webpack";
-import { Forms, React } from "@webpack/common";
-
-import hideBugReport from "./hideBugReport.css?managed";
+import { findByPropsLazy } from "@webpack";
+import { React } from "@webpack/common";
 
 const KbdStyles = findByPropsLazy("key", "combo");
-const BugReporterExperiment = findLazy(m => m?.definition?.id === "2024-09_bug_reporter");
-
 const modKey = IS_MAC ? "cmd" : "ctrl";
 const altKey = IS_MAC ? "opt" : "alt";
 
@@ -34,6 +32,7 @@ const settings = definePluginSettings({
 export default definePlugin({
     name: "Experiments",
     description: "Enable Access to Experiments & other dev-only features in Discord!",
+    tags: ["Developers", "Utility"],
     authors: [
         Devs.Megu,
         Devs.Ven,
@@ -42,6 +41,7 @@ export default definePlugin({
         Devs.Nuckyz,
     ],
 
+    isModified: true,
     settings,
 
     patches: [
@@ -60,49 +60,48 @@ export default definePlugin({
             }
         },
         {
-            find: 'H1,title:"Experiments"',
-            replacement: {
-                match: 'title:"Experiments",children:[',
-                replace: "$&$self.WarningCard(),"
-            }
+            find: 'placeholder:"Search experiments"',
+            replacement: [
+                {
+                    match: /(?<=children:\[)(?=null!=.{0,150}"Installation ID:)/,
+                    replace: "$self.WarningCard(),"
+                },
+                // for some reason the installation id and copy buttons are on
+                // different lines so it looks stupid when the card above is added
+                {
+                    match: /(?<=,marginBottom:16)(?=\},children:\[)/,
+                    replace: ',flexDirection:"row",alignItems:"center"'
+                }
+            ]
         },
-        // Change top right chat toolbar button from the help one to the dev one
+        // Change top right toolbar button from the help one to the dev one
         {
-            find: '"M9 3v18"',
+            find: '?"BACK_FORWARD_NAVIGATION":',
             replacement: {
                 match: /hasBugReporterAccess:(\i)/,
                 replace: "_hasBugReporterAccess:$1=true"
             },
             predicate: () => settings.store.toolbarDevMenu
         },
-
-        // Make the Favourites Server experiment allow favouriting DMs and threads
+        // Disable opening the bug report menu when clicking the top right toolbar dev button
         {
-            find: "useCanFavoriteChannel",
+            find: 'navId:"staff-help-popout"',
             replacement: {
-                match: /\i\.isDM\(\)\|\|\i\.isThread\(\)/,
-                replace: "false",
-            }
-        },
-        // Enable option to always record clips even if you are not streaming
-        {
-            find: "isDecoupledGameClippingEnabled(){",
-            replacement: {
-                match: /\i\.isStaff\(\)/,
-                replace: "true"
+                match: /(isShown.+?)onClick:\i/,
+                replace: (_, rest) => `${rest}onClick:()=>{}`
             }
         },
         // Enable experiment embed on sent experiment links
         {
-            find: "dev://experiment/",
+            find: "Clear Treatment ",
             replacement: [
                 {
-                    match: /\i\.isStaff\(\)/,
+                    match: /\i\?\.isStaff\(\)/,
                     replace: "true"
                 },
                 // Fix some tricky experiments name causing a client crash
                 {
-                    match: /.getExperimentBucketName.+?if\(null==(\i)\|\|null==\i(?=\)return null;)/,
+                    match: /\.isStaffPersonal\(\).+?if\(null==(\i)\|\|null==\i(?=\)return null;)/,
                     replace: "$&||({})[$1]!=null"
                 }
             ]
@@ -114,45 +113,76 @@ export default definePlugin({
                 match: /}getServerAssignment\((\i),\i,\i\){/,
                 replace: "$&if($1==null)return;"
             }
-        }
+        },
+        // Enable playground embed on sent playground links
+        // dev://playground/mana, dev://playground/payments, dev://playground/virtual-currency,
+        // dev://playground/nitro, dev://playground/mfa, dev://playground/cms, dev://playground/void
+        {
+            find: ".useComponentPlaygroundConfigs)()",
+            replacement: {
+                match: /"Revenue".{0,250}getCurrentUser\(\);return/,
+                replace: "$& true||"
+            }
+        },
+        {
+            // Expands the experiment regex to allow negative numbers as well as text in the last segment of the URL.
+            find: '"^dev://experiment/',
+            replacement: {
+                match: /\[0-9\]\+(?=\)\)\?\$")/,
+                replace: "[a-zA-Z0-9-]+"
+            }
+        },
+        {
+            find: ".EXPERIMENT_TREATMENT&&null",
+            replacement: [
+                {
+                    // Allow linking experiments by their label instead of their value.
+                    match: /(?<=find\(\i=>)((\i).value===\i)/,
+                    replace: "{return($1)||($self.matchExperiment(arguments[0].url,$2.label))}"
+                }
+            ]
+        },
     ],
-
-    start: () => !BugReporterExperiment.getCurrentConfig().hasBugReporterAccess && enableStyle(hideBugReport),
-    stop: () => disableStyle(hideBugReport),
+    matchExperiment(url: string, label: string): boolean {
+        const items = url.split("/");
+        const labelCleaned = label.replace(/[^a-zA-Z0-9]+/g, "").toLowerCase();
+        const urlEndCleaned = items[items.length - 1]?.replace(/[^a-zA-Z0-9]+/g, "").toLowerCase();
+        return !!labelCleaned && urlEndCleaned !== undefined && labelCleaned === urlEndCleaned;
+    },
 
     settingsAboutComponent: () => {
         return (
             <React.Fragment>
-                <Forms.FormTitle tag="h3">More Information</Forms.FormTitle>
-                <Forms.FormText variant="text-md/normal">
+                <HeadingSecondary>More Information</HeadingSecondary>
+                <BaseText size="md">
                     You can open Discord's DevTools via {" "}
                     <div className={KbdStyles.combo} style={{ display: "inline-flex" }}>
-                        <kbd className={KbdStyles.key}>{modKey}</kbd> +{" "}
-                        <kbd className={KbdStyles.key}>{altKey}</kbd> +{" "}
+                        <kbd className={KbdStyles.key}>{modKey}</kbd>{" "}
+                        <kbd className={KbdStyles.key}>{altKey}</kbd>{" "}
                         <kbd className={KbdStyles.key}>O</kbd>{" "}
                     </div>
-                </Forms.FormText>
+                </BaseText>
             </React.Fragment>
         );
     },
 
     WarningCard: ErrorBoundary.wrap(() => (
         <ErrorCard id="vc-experiments-warning-card" className={Margins.bottom16}>
-            <Forms.FormTitle tag="h2">Hold on!!</Forms.FormTitle>
+            <HeadingPrimary>Hold on!!</HeadingPrimary>
 
-            <Forms.FormText>
+            <Paragraph>
                 Experiments are unreleased Discord features. They might not work, or even break your client or get your account disabled.
-            </Forms.FormText>
+            </Paragraph>
 
-            <Forms.FormText className={Margins.top8}>
+            <Paragraph className={Margins.top8}>
                 Only use experiments if you know what you're doing. Equicord is not responsible for any damage caused by enabling experiments.
 
                 If you don't know what an experiment does, ignore it. Do not ask us what experiments do either, we probably don't know.
-            </Forms.FormText>
+            </Paragraph>
 
-            <Forms.FormText className={Margins.top8}>
+            <Paragraph className={Margins.top8}>
                 No, you cannot use server-side features like checking the "Send to Client" box.
-            </Forms.FormText>
+            </Paragraph>
         </ErrorCard>
     ), { noop: true })
 });

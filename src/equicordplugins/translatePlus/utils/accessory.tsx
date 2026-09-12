@@ -4,11 +4,11 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { languages } from "@equicordplugins/translatePlus/misc/languages";
+import { cl, Translation } from "@equicordplugins/translatePlus/misc/types";
 import { Message } from "@vencord/discord-types";
 import { Parser, useEffect, useState } from "@webpack/common";
 
-import { languages } from "../misc/languages";
-import { cl, Translation } from "../misc/types";
 import { Icon } from "./icon";
 import { translate } from "./translator";
 
@@ -28,12 +28,12 @@ export function Accessory({ message }: { message: Message; }) {
     if (!translation) return null;
 
     return (
-        <span className={cl("accessory")}>
-            <Icon width={16} height={16} />
+        <div className={cl("accessory")}>
+            <Icon height={16} width={16} />
             {Parser.parse(translation.text)}
             {" "}
             (translated from {languages[translation.src] ?? translation.src} - <button onClick={() => setTranslation(undefined)} className={cl("dismiss")}>Dismiss</button>)
-        </span>
+        </div>
     );
 }
 

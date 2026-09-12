@@ -5,22 +5,35 @@
  */
 
 import { definePluginSettings } from "@api/Settings";
-import { classNameFactory } from "@api/Styles";
+import { disableStyle, enableStyle } from "@api/Styles";
+import { AchievementsIcon, AppsIcon, CreditCardIcon, EquicordIcon, GameControllerIcon, HammerAndChiselIcon, MainSettingsIcon, PencilSparkleIcon, UserIcon } from "@components/Icons";
+import { buildPluginMenuEntries, buildThemeMenuEntries } from "@equicordplugins/equicordToolbox/menu";
 import { Devs } from "@utils/constants";
+import { classNameFactory } from "@utils/css";
 import { getIntlMessage } from "@utils/discord";
 import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
-import { waitFor } from "@webpack";
+import { Icon } from "@vencord/discord-types";
+import { findCssClassesLazy } from "@webpack";
 import { ComponentDispatch, FocusLock, Menu, useEffect, useRef } from "@webpack/common";
-import type { HTMLAttributes, ReactElement } from "react";
+import type { HTMLAttributes, ReactElement, ReactNode } from "react";
 
-import PluginsSubmenu from "./PluginsSubmenu";
-
-type SettingsEntry = { section: string, label: string; };
+import fullHeightStyle from "./fullHeightContext.css?managed";
 
 const cl = classNameFactory("");
-let Classes: Record<string, string>;
-waitFor(["animating", "baseLayer", "bg", "layer", "layers"], m => Classes = m);
+const Classes = findCssClassesLazy("animating", "baseLayer", "bg", "layer", "layers");
+
+const SECTION_ICONS: Record<string, Icon> = {
+    profile_section: PencilSparkleIcon,
+    user_section: UserIcon,
+    equicord_section: EquicordIcon,
+    billing_section: CreditCardIcon,
+    app_section: AppsIcon,
+    games_and_apps_section: GameControllerIcon,
+    developer_section: HammerAndChiselIcon,
+    utility_section: MainSettingsIcon,
+    playgrounds: AchievementsIcon,
+};
 
 const settings = definePluginSettings({
     disableFade: {
@@ -32,7 +45,8 @@ const settings = definePluginSettings({
     organizeMenu: {
         description: "Organizes the settings cog context menu into categories",
         type: OptionType.BOOLEAN,
-        default: true
+        default: true,
+        restartNeeded: true
     },
     eagerLoad: {
         description: "Removes the loading delay when opening the menu for the first time",
@@ -79,28 +93,35 @@ export default definePlugin({
     name: "BetterSettings",
     description: "Enhances your settings-menu-opening experience",
     authors: [Devs.Kyuuhachi],
+    tags: ["Appearance", "Customisation", "Organisation"],
     settings,
+
+    start() {
+        if (settings.store.organizeMenu)
+            enableStyle(fullHeightStyle);
+    },
+
+    stop() {
+        disableStyle(fullHeightStyle);
+    },
 
     patches: [
         {
             find: "this.renderArtisanalHack()",
             replacement: [
                 {
-                    // Fade in on layer
-                    match: /(?<=\((\i),"contextType",\i\.\i\);)/,
-                    replace: "$1=$self.Layer;",
+                    match: /class (\i)( extends \i\.PureComponent.+?jsx\)\(\1,\{mode:)/,
+                    replace: "var $1=$self.Layer;class VencordPatchedOldFadeLayer$2",
                     predicate: () => settings.store.disableFade
                 },
-                {
-                    // Lazy-load contents
+                { // Lazy-load contents
                     match: /createPromise:\(\)=>([^:}]*?),webpackId:"?\d+"?,name:(?!="CollectiblesShop")"[^"]+"/g,
                     replace: "$&,_:$1",
                     predicate: () => settings.store.eagerLoad
                 }
             ]
         },
-        {
-            // For some reason standardSidebarView also has a small fade-in
+        { // For some reason standardSidebarView also has a small fade-in
             find: 'minimal:"contentColumnMinimal"',
             replacement: [
                 {
@@ -114,30 +135,47 @@ export default definePlugin({
             ],
             predicate: () => settings.store.disableFade
         },
-        { // Load menu TOC eagerly
-            find: "#{intl::USER_SETTINGS_WITH_BUILD_OVERRIDE}",
+        { // Disable fade animations for settings menu
+            find: '"data-mana-component":"layer-modal"',
+            replacement: [
+                {
+                    match: /(\i)\.animated\.div(?=,\{"data-mana-component":"layer-modal")/,
+                    replace: '"div"'
+                },
+                {
+                    match: /(?<="data-mana-component":"layer-modal"[^}]*?)style:\i,/,
+                    replace: "style:{},"
+                }
+            ],
+            predicate: () => settings.store.disableFade
+        },
+        { // Disable initial and exit delay for settings menu
+            find: "headerId:void 0,headerIdIsManaged:!1",
             replacement: {
-                match: /(\i)\(this,"handleOpenSettingsContextMenu",.{0,100}?null!=\i&&.{0,100}?(await [^};]*?\)\)).*?,(?=\1\(this)/,
-                replace: "$&(async ()=>$2)(),"
+                match: /let (\i)=300/,
+                replace: "let $1=0"
+            },
+            predicate: () => settings.store.disableFade
+        },
+        { // Load menu TOC eagerly
+            find: "handleOpenSettingsContextMenu=",
+            replacement: {
+                match: /(?=handleOpenSettingsContextMenu=.{0,100}?null!=\i&&.{0,100}?(await [^};]*?\)\)))/,
+                replace: "_vencordBetterSettingsEagerLoad=(async ()=>$1)();"
             },
             predicate: () => settings.store.eagerLoad
         },
         { // Settings cog context menu
             find: "#{intl::USER_SETTINGS_ACTIONS_MENU_LABEL}",
+            predicate: () => settings.store.organizeMenu,
             replacement: [
                 {
-                    match: /(\(0,\i.\i\)\(\))(?=\.filter\(\i=>\{let\{section:\i\}=)/,
-                    replace: "$self.wrapMenu($1)"
-                },
-                {
-                    match: /case \i\.\i\.DEVELOPER_OPTIONS:return \i;/,
-                    replace: "$&case 'VencordPlugins':return $self.PluginsSubmenu();"
+                    match: /children:\[(\i),null!=(\i).{0,30}\}\),(\i)\](?<=\1=(?:function|.{0,30}\.openUserSettings).+?)/, // TODO .{0,30}\.openUserSettings is stable compat
+                    replace: "children:$self.transformSettingsEntries([$1,$2,$3])",
                 }
             ]
         },
     ],
-
-    PluginsSubmenu,
 
     // This is the very outer layer of the entire ui, so we can't wrap this in an ErrorBoundary
     // without possibly also catching unrelated errors of children.
@@ -145,7 +183,7 @@ export default definePlugin({
     // Thus, we sanity check webpack modules
     Layer(props: LayerProps) {
         try {
-            [FocusLock.$$vencordGetWrappedComponent(), ComponentDispatch, Classes].forEach(e => e.test);
+            [FocusLock.$$vencordGetWrappedComponent(), ComponentDispatch, Classes.layer].forEach(e => e.test);
         } catch {
             new Logger("BetterSettings").error("Failed to find some components");
             return props.children;
@@ -154,49 +192,52 @@ export default definePlugin({
         return <Layer {...props} />;
     },
 
-    wrapMenu(list: SettingsEntry[]) {
-        if (!settings.store.organizeMenu) return list;
+    transformSettingsEntries(list: ReactElement<any>[]): ReactNode[] {
+        const items: ReactNode[] = [];
+        const SECTION_NAMES: Record<string, string> = {
+            user_section: getIntlMessage("USER_SETTINGS"),
+            utility_section: getIntlMessage("USER_SETTINGS_KEYBINDS_MISCELLANEOUS_SECTION_TITLE")
+        };
 
-        const items = [{ label: null as string | null, items: [] as SettingsEntry[] }];
+        const flat = list.flat(Infinity);
+        let logout: ReactNode = null;
 
-        for (const item of list) {
-            if (item.section === "HEADER") {
-                items.push({ label: item.label, items: [] });
-            } else if (item.section === "DIVIDER") {
-                items.push({ label: getIntlMessage("OTHER_OPTIONS"), items: [] });
+        for (const item of flat) {
+            if (!item?.props) continue;
+            const { key, props } = item;
+
+            if (key === "equicord_plugins" || key === "equicord_themes") {
+                const children = key === "equicord_plugins"
+                    ? buildPluginMenuEntries()
+                    : buildThemeMenuEntries();
+
+                items.push(
+                    <Menu.MenuItem key={key} label={props.label} id={props.label} {...props}>
+                        {children}
+                    </Menu.MenuItem>
+                );
+            } else if ((key?.endsWith("_section") || key === "playgrounds") && (props.label ?? SECTION_NAMES[key])) {
+                const iconLeft = SECTION_ICONS[key];
+                const children: any = [].concat(props.children ?? []).flat(Infinity);
+                const logoutItem = children.find(c => c?.key === "logout_sidebar_item");
+                if (logoutItem) logout = <Menu.MenuItem key={logoutItem.key} {...logoutItem.props} />;
+
+                items.push(
+                    <Menu.MenuItem
+                        key={key}
+                        label={props.label ?? SECTION_NAMES[key]}
+                        id={props.label ?? SECTION_NAMES[key]}
+                        {...(iconLeft && { iconLeft })}
+                    >
+                        {this.transformSettingsEntries(children.filter(c => c?.key !== "logout_sidebar_item"))}
+                    </Menu.MenuItem>
+                );
             } else {
-                items.at(-1)!.items.push(item);
+                items.push(item);
             }
         }
 
-        return {
-            filter(predicate: (item: SettingsEntry) => boolean) {
-                for (const category of items) {
-                    category.items = category.items.filter(predicate);
-                }
-                return this;
-            },
-            map(render: (item: SettingsEntry) => ReactElement<any>) {
-                return items
-                    .filter(a => a.items.length > 0)
-                    .map(({ label, items }) => {
-                        const children = items.map(render);
-                        if (label) {
-                            return (
-                                <Menu.MenuItem
-                                    key={label}
-                                    id={label.replace(/\W/, "_")}
-                                    label={label}
-                                    action={children[0].props.action}
-                                >
-                                    {children}
-                                </Menu.MenuItem>
-                            );
-                        } else {
-                            return children;
-                        }
-                    });
-            }
-        };
+        if (logout) items.push(logout);
+        return items;
     }
 });

@@ -19,8 +19,6 @@
 import "./style.css";
 
 import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
-import { addMessageAccessory, removeMessageAccessory } from "@api/MessageAccessories";
-import { addMessagePopoverButton, removeMessagePopoverButton } from "@api/MessagePopover";
 import { Devs, EquicordDevs } from "@utils/constants";
 import definePlugin from "@utils/types";
 import { ChannelStore, Menu } from "@webpack/common";
@@ -40,6 +38,7 @@ const messageCtxPatch: NavContextMenuPatchCallback = (children, { message }) => 
             id="ec-trans"
             label="Translate"
             icon={Icon}
+            leadingAccessory={{ type: "icon", icon: Icon }}
             action={() => handleTranslate(message)}
         />
     ));
@@ -48,19 +47,18 @@ const messageCtxPatch: NavContextMenuPatchCallback = (children, { message }) => 
 export default definePlugin({
     name: "Translate+",
     description: "Vencord's translate plugin but with support for artistic languages!",
-    dependencies: ["MessageAccessoriesAPI"],
+    dependencies: ["MessageAccessoriesAPI", "MessagePopoverAPI"],
+    tags: ["Chat", "Utility"],
     authors: [Devs.Ven, EquicordDevs.Prince527],
     settings,
     contextMenus: {
         "message": messageCtxPatch
     },
-
-    start() {
-        addMessageAccessory("ec-translation", props => <Accessory message={props.message} />);
-
-        addMessagePopoverButton("ec-translate", message => {
+    renderMessageAccessory: props => <Accessory message={props.message} />,
+    messagePopoverButton: {
+        icon: Icon,
+        render(message) {
             if (!message.content) return null;
-
             return {
                 label: "Translate",
                 icon: Icon,
@@ -68,10 +66,6 @@ export default definePlugin({
                 channel: ChannelStore.getChannel(message.channel_id),
                 onClick: () => handleTranslate(message),
             };
-        });
-    },
-    stop() {
-        removeMessagePopoverButton("ec-translate");
-        removeMessageAccessory("ec-translation");
+        }
     }
 });

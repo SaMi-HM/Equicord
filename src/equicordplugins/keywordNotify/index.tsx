@@ -8,45 +8,87 @@ import "./style.css";
 
 import { DataStore } from "@api/index";
 import { definePluginSettings } from "@api/Settings";
-import { classNameFactory } from "@api/Styles";
-import { Flex } from "@components/Flex";
-import { DeleteIcon } from "@components/Icons";
+import { Button } from "@components/Button";
+import ErrorBoundary from "@components/ErrorBoundary";
+import { DoubleCheckmarkIcon } from "@components/Icons";
 import { EquicordDevs } from "@utils/constants";
-import { Margins } from "@utils/margins";
+import { classNameFactory } from "@utils/css";
 import { classes } from "@utils/misc";
-import { useForceUpdater } from "@utils/react";
 import definePlugin, { OptionType } from "@utils/types";
-import { Message, User } from "@vencord/discord-types";
-import { findByCodeLazy, findByPropsLazy } from "@webpack";
-import { Button, ChannelStore, FluxDispatcher, Forms, Select, SelectedChannelStore, Switch, TabBar, TextInput, Tooltip, UserStore, useState } from "@webpack/common";
-import type { JSX, PropsWithChildren } from "react";
+import { Message, ScrollerBaseRef } from "@vencord/discord-types";
+import { findByCodeLazy, findCssClassesLazy } from "@webpack";
+import {
+    ChannelStore,
+    FluxDispatcher,
+    ScrollerThin,
+    TabBar,
+    Tooltip,
+    useRef,
+    UserStore,
+    useState
+} from "@webpack/common";
+import type { JSX, RefObject } from "react";
 
-type IconProps = JSX.IntrinsicElements["svg"];
-type KeywordEntry = { regex: string, listIds: Array<string>, listType: ListType, ignoreCase: boolean; };
+import { KeywordEntries } from "./components/KeywordEntries";
 
-let keywordEntries: Array<KeywordEntry> = [];
-let currentUser: User;
-let keywordLog: Array<any> = [];
+interface KeywordEntry {
+    regex: string;
+    listIds?: string[];
+    listType?: ListType;
+    ignoreCase: boolean;
+    ignoreBots?: boolean;
+    whitelist: string[];
+    blacklist: string[];
+    listPriority: ListType;
+}
+
+export let keywordEntries: Array<KeywordEntry> = [];
+let keywordLog: Array<Message> = [];
 let interceptor: (e: any) => void;
 
-const recentMentionsPopoutClass = findByPropsLazy("recentMentionsPopout");
-const tabClass = findByPropsLazy("inboxTitle", "tab");
-const buttonClass = findByPropsLazy("size36");
-const MenuHeader = findByCodeLazy(".getUnseenInviteCount())");
-const Popout = findByCodeLazy("getProTip", "canCloseAllMessages:");
+interface ScrollerContext {
+    id: string;
+    onKeyDown: () => void;
+    orientation: string;
+    ref: RefObject<unknown>;
+    tabIndex: number;
+}
+
+interface ScrollerOpts {
+    role: string;
+    tabIndex: ScrollerContext["tabIndex"];
+    "data-list-id": ScrollerContext["id"];
+    onKeyDown: ScrollerContext["onKeyDown"];
+    ref: ScrollerContext["ref"];
+    "aria-orientation": ScrollerContext["orientation"];
+}
+
+const scrollerClass = findCssClassesLazy("singleMessage", "scroller");
+const tabClass = findCssClassesLazy("inboxTitle", "tab");
+
+const PopoutContainer = findByCodeLazy("navigator", "Provider");
+const getMessageScrollerOptions: () => ScrollerOpts = findByCodeLazy("onKeyDown", "tabIndex", "useContext", "aria-orientation");
+const createNavigator = findByCodeLazy("keyboardModeEnabled)", "scrollIntoViewNode");
 const createMessageRecord = findByCodeLazy(".createFromServer(", ".isBlockedForMessage", "messageReference:");
-const KEYWORD_ENTRIES_KEY = "KeywordNotify_keywordEntries";
+export const KEYWORD_ENTRIES_KEY = "KeywordNotify_keywordEntries";
 const KEYWORD_LOG_KEY = "KeywordNotify_log";
 
-const cl = classNameFactory("vc-keywordnotify-");
+export const cl = classNameFactory("vc-keywordnotify-");
 
-async function addKeywordEntry(forceUpdate: () => void) {
-    keywordEntries.push({ regex: "", listIds: [], listType: ListType.BlackList, ignoreCase: false });
+export async function addKeywordEntry(forceUpdate: () => void) {
+    keywordEntries.push({
+        regex: "",
+        ignoreCase: false,
+        ignoreBots: true,
+        whitelist: [],
+        blacklist: [],
+        listPriority: ListType.BlackList,
+    });
     await DataStore.set(KEYWORD_ENTRIES_KEY, keywordEntries);
     forceUpdate();
 }
 
-async function removeKeywordEntry(idx: number, forceUpdate: () => void) {
+export async function removeKeywordEntry(idx: number, forceUpdate: () => void) {
     keywordEntries.splice(idx, 1);
     await DataStore.set(KEYWORD_ENTRIES_KEY, keywordEntries);
     forceUpdate();
@@ -60,13 +102,9 @@ function safeMatchesRegex(str: string, regex: string, flags: string) {
     }
 }
 
-enum ListType {
+export enum ListType {
     BlackList = "BlackList",
     Whitelist = "Whitelist"
-}
-
-interface BaseIconProps extends IconProps {
-    viewBox: string;
 }
 
 function highlightKeywords(str: string, entries: Array<KeywordEntry>) {
@@ -84,207 +122,12 @@ function highlightKeywords(str: string, entries: Array<KeywordEntry>) {
 
     const idx = str.indexOf(matches[0]);
 
-    return [
-        <span key={idx}>{str.substring(0, idx)}</span>,
-        <span className="highlight" key={idx}>{matches[0]}</span>,
-        <span key={idx}>{str.substring(idx + matches[0].length)}</span>
-    ];
-}
-
-function Collapsible({ title, children }) {
-    const [isOpen, setIsOpen] = useState(false);
-
-    return (
-        <div>
-            <Button
-                onClick={() => setIsOpen(!isOpen)}
-                look={Button.Looks.BLANK}
-                size={Button.Sizes.ICON}
-                className={cl("collapsible")}>
-                <div style={{ display: "flex", alignItems: "center" }}>
-                    <div style={{ marginLeft: "auto", color: "var(--text-muted)", paddingRight: "5px" }}>{isOpen ? "▼" : "▶"}</div>
-                    <Forms.FormTitle tag="h4">{title}</Forms.FormTitle>
-                </div>
-            </Button>
-            {isOpen && children}
-        </div>
-    );
-}
-
-function ListedIds({ listIds, setListIds }) {
-    const update = useForceUpdater();
-    const [values] = useState(listIds);
-
-    async function onChange(e: string, index: number) {
-        values[index] = e;
-        setListIds(values);
-        update();
-    }
-
-    const elements = values.map((currentValue: string, index: number) => {
-        return (
-            <Flex flexDirection="row" style={{ marginBottom: "5px" }} key={index}>
-                <div style={{ flexGrow: 1 }}>
-                    <TextInput
-                        placeholder="ID"
-                        spellCheck={false}
-                        value={currentValue}
-                        onChange={e => onChange(e, index)}
-                    />
-                </div>
-                <Button
-                    onClick={() => {
-                        values.splice(index, 1);
-                        setListIds(values);
-                        update();
-                    }}
-                    look={Button.Looks.BLANK}
-                    size={Button.Sizes.ICON}
-                    className={cl("delete")}>
-                    <DeleteIcon />
-                </Button>
-            </Flex>
-        );
-    });
-
     return (
         <>
-            {elements}
+            <span>{str.substring(0, idx)}</span>
+            <span className="highlight">{matches[0]}</span>
+            <span>{str.substring(idx + matches[0].length)}</span>
         </>
-    );
-}
-
-function ListTypeSelector({ listType, setListType }: { listType: ListType, setListType: (v: ListType) => void; }) {
-    return (
-        <Select
-            options={[
-                { label: "Whitelist", value: ListType.Whitelist },
-                { label: "Blacklist", value: ListType.BlackList }
-            ]}
-            placeholder={"Select a list type"}
-            isSelected={v => v === listType}
-            closeOnSelect={true}
-            select={setListType}
-            serialize={v => v}
-        />
-    );
-}
-
-function KeywordEntries() {
-    const update = useForceUpdater();
-    const [values] = useState(keywordEntries);
-
-    async function setRegex(index: number, value: string) {
-        keywordEntries[index].regex = value;
-        await DataStore.set(KEYWORD_ENTRIES_KEY, keywordEntries);
-        update();
-    }
-
-    async function setListType(index: number, value: ListType) {
-        keywordEntries[index].listType = value;
-        await DataStore.set(KEYWORD_ENTRIES_KEY, keywordEntries);
-        update();
-    }
-
-    async function setListIds(index: number, value: Array<string>) {
-        keywordEntries[index].listIds = value ?? [];
-        await DataStore.set(KEYWORD_ENTRIES_KEY, keywordEntries);
-        update();
-    }
-
-    const elements = keywordEntries.map((entry, i) => {
-        return (
-            <>
-                <Collapsible title={`Keyword Entry ${i + 1}`}>
-                    <Flex flexDirection="row">
-                        <div style={{ flexGrow: 1 }}>
-                            <TextInput
-                                placeholder="example|regex"
-                                spellCheck={false}
-                                value={values[i].regex}
-                                onChange={e => setRegex(i, e)}
-                            />
-                        </div>
-                        <Button
-                            onClick={() => removeKeywordEntry(i, update)}
-                            look={Button.Looks.BLANK}
-                            size={Button.Sizes.ICON}
-                            className={cl("delete")}>
-                            <DeleteIcon />
-                        </Button>
-                    </Flex>
-                    <Switch
-                        value={values[i].ignoreCase}
-                        onChange={() => {
-                            values[i].ignoreCase = !values[i].ignoreCase;
-                            update();
-                        }}
-                        style={{ marginTop: "0.5em", marginRight: "40px" }}
-                    >
-                        Ignore Case
-                    </Switch>
-                    <Forms.FormTitle tag="h5">Whitelist/Blacklist</Forms.FormTitle>
-                    <Flex flexDirection="row">
-                        <div style={{ flexGrow: 1 }}>
-                            <ListedIds listIds={values[i].listIds} setListIds={e => setListIds(i, e)} />
-                        </div>
-                    </Flex>
-                    <div className={[Margins.top8, Margins.bottom8].join(" ")} />
-                    <Flex flexDirection="row">
-                        <Button onClick={() => {
-                            values[i].listIds.push("");
-                            update();
-                        }}>Add ID</Button>
-                        <div style={{ flexGrow: 1 }}>
-                            <ListTypeSelector listType={values[i].listType} setListType={e => setListType(i, e)} />
-                        </div>
-                    </Flex>
-                </Collapsible>
-            </>
-        );
-    });
-
-    return (
-        <>
-            {elements}
-            <div><Button onClick={() => addKeywordEntry(update)}>Add Keyword Entry</Button></div>
-        </>
-    );
-}
-
-function Icon({ height = 24, width = 24, className, children, viewBox, ...svgProps }: PropsWithChildren<BaseIconProps>) {
-    return (
-        <svg
-            className={classes(className, "vc-icon")}
-            role="img"
-            width={width}
-            height={height}
-            viewBox={viewBox}
-            {...svgProps}
-        >
-            {children}
-        </svg>
-    );
-}
-
-// Ideally I would just add this to Icons.tsx, but I cannot as this is a user-plugin :/
-function DoubleCheckmarkIcon(props: IconProps) {
-    // noinspection TypeScriptValidateTypes
-    return (
-        <Icon
-            {...props}
-            className={classes(props.className, "vc-double-checkmark-icon")}
-            viewBox="0 0 24 24"
-            width={16}
-            height={16}
-        >
-            <path fill="currentColor"
-                d="M16.7 8.7a1 1 0 0 0-1.4-1.4l-3.26 3.24a1 1 0 0 0 1.42 1.42L16.7 8.7ZM3.7 11.3a1 1 0 0 0-1.4 1.4l4.5 4.5a1 1 0 0 0 1.4-1.4l-4.5-4.5Z"
-            />
-            <path fill="currentColor"
-                d="M21.7 9.7a1 1 0 0 0-1.4-1.4L13 15.58l-3.3-3.3a1 1 0 0 0-1.4 1.42l4 4a1 1 0 0 0 1.4 0l8-8Z"
-            />
-        </Icon>
     );
 }
 
@@ -292,7 +135,8 @@ const settings = definePluginSettings({
     ignoreBots: {
         type: OptionType.BOOLEAN,
         description: "Ignore messages from bots",
-        default: true
+        default: true,
+        hidden: true,
     },
     amountToKeep: {
         type: OptionType.NUMBER,
@@ -308,46 +152,67 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "KeywordNotify",
-    authors: [EquicordDevs.camila314, EquicordDevs.x3rt],
+    authors: [EquicordDevs.camila314, EquicordDevs.x3rt, EquicordDevs.benjas333],
     description: "Sends a notification if a given message matches certain keywords or regexes",
     settings,
     patches: [
         {
-            find: "#{intl::UNREADS_TAB_LABEL})}",
-            replacement: {
-                match: /,(\i\?\(0,\i\.jsxs\)\(\i\.\i\i\.Item)/,
-                replace: ",$self.keywordTabBar()$&"
-            }
-        },
-        {
-            find: "location:\"RecentsPopout\"});",
-            replacement: {
-                match: /(?<=setTab:(\i),badgeState:\i,closePopout:(\i).{0,50}):(\i)===\i\.\i\.MENTIONS\?\(0,.+?onJump:(\i)/,
-                replace: ": $3 === 8 ? $self.tryKeywordMenu($1, $4, $2) $&"
-            }
-        },
-        {
-            find: ".guildFilter:null",
+            find: "#{intl::MENTIONS})",
+            group: true,
             replacement: [
                 {
-                    match: /function (\i)\(\i\){let{message:\i,gotoMessage/,
-                    replace: "$self.renderMsg = $1; $&"
+                    match: /#{intl::Fn6Odn::raw}\)\}\)\}\):null/,
+                    replace: "$&,$self.keywordTabBar()"
+                },
+                {
+                    match: /:(\i)===\i\.\i\.MENTIONS\?\(0,.{0,500}null}/,
+                    replace: ": $1 === 8 ? $self.keywordClearButton() $&",
+                },
+                {
+                    match: /:(\i)===\i\.\i\.MENTIONS\?\(0,.{0,500}onJump:(\i)}\)/,
+                    replace: ": $1 === 8 ? $self.tryKeywordMenu($2) $&",
+                },
+                {
+                    match: /function (\i)\(\i\){let{message:\i,onJump/,
+                    replace: "$self.RenderMsg = $1; $&",
                 },
                 {
                     match: /onClick:\(\)=>(\i\.\i\.deleteRecentMention\((\i)\.id\))/,
-                    replace: "onClick: () => $2._keyword ? $self.deleteKeyword($2.id) : $1"
-                }
+                    replace: "onClick: () => $2._keyword ? $self.deleteKeyword($2.id) : $1",
+                },
             ]
         },
     ],
 
     async start() {
         this.onUpdate = () => null;
-        currentUser = UserStore.getCurrentUser();
+
         keywordEntries = await DataStore.get(KEYWORD_ENTRIES_KEY) ?? [];
+        keywordEntries.forEach(entry => {
+            entry.ignoreBots = entry.ignoreBots ?? this.settings.store.ignoreBots;
+
+            entry.whitelist = entry.whitelist ?? [];
+            entry.blacklist = entry.blacklist ?? [];
+            entry.listPriority = entry.listPriority ?? ListType.BlackList;
+
+            if (entry.listType == null || entry.listIds == null) return;
+
+            if (entry.listType === ListType.Whitelist) {
+                entry.whitelist = entry.listIds;
+            } else {
+                entry.blacklist = entry.listIds;
+            }
+            delete entry.listIds;
+            delete entry.listType;
+        });
         await DataStore.set(KEYWORD_ENTRIES_KEY, keywordEntries);
+
         (await DataStore.get(KEYWORD_LOG_KEY) ?? []).map(e => JSON.parse(e)).forEach(e => {
-            this.addToLog(e);
+            try {
+                this.addToLog(e);
+            } catch (err) {
+                console.error(err);
+            }
         });
 
         interceptor = (e: any) => {
@@ -355,7 +220,6 @@ export default definePlugin({
         };
         FluxDispatcher.addInterceptor(interceptor);
     },
-
     stop() {
         const index = FluxDispatcher._interceptors.indexOf(interceptor);
         if (index > -1) {
@@ -371,24 +235,45 @@ export default definePlugin({
                 continue;
             }
 
-            let listed = entry.listIds.some(id => id === m.channel_id || id === m.author.id);
-            if (!listed) {
+            let isInWhitelist = entry.whitelist.some(id => {
+                const trimmed = id.trim();
+                return trimmed === m.channel_id || trimmed === m.author.id;
+            });
+            if (!isInWhitelist) {
                 const channel = ChannelStore.getChannel(m.channel_id);
                 if (channel != null) {
-                    listed = entry.listIds.some(id => id === channel.guild_id);
+                    isInWhitelist = entry.whitelist.some(id => id.trim() === channel.guild_id);
                 }
             }
 
-            const whitelistMode = entry.listType === ListType.Whitelist;
-
-            if (!whitelistMode && listed) {
-                continue;
+            let isInBlacklist = entry.blacklist.some(id => {
+                const trimmed = id.trim();
+                return trimmed === m.channel_id || trimmed === m.author.id;
+            });
+            if (!isInBlacklist) {
+                const channel = ChannelStore.getChannel(m.channel_id);
+                if (channel != null) {
+                    isInBlacklist = entry.blacklist.some(id => id.trim() === channel.guild_id);
+                }
             }
-            if (whitelistMode && !listed) {
-                continue;
+
+            const isWhitelistPrioritized = entry.listPriority === ListType.Whitelist;
+
+            if (isInWhitelist && isInBlacklist) {
+                if (!isWhitelistPrioritized) {
+                    continue;
+                }
+            } else {
+                if (entry.whitelist.length && !isInWhitelist) {
+                    continue;
+                }
+
+                if (isInBlacklist) {
+                    continue;
+                }
             }
 
-            if (settings.store.ignoreBots && m.author.bot && (!whitelistMode || !entry.listIds.includes(m.author.id))) {
+            if (m.author.bot && entry.ignoreBots && (!entry.whitelist.length || !entry.whitelist.includes(m.author.id))) {
                 continue;
             }
 
@@ -413,25 +298,56 @@ export default definePlugin({
         }
 
         if (matches) {
-            // @ts-ignore
-            m.mentions.push({ id: currentUser.id });
+            const id = UserStore.getCurrentUser()?.id;
+            if (id != null) {
+                // @ts-ignore
+                m.mentions.push({ id: id });
+            }
 
-            if (m.author.id !== currentUser.id)
+            if (m.author.id !== id) {
+                this.storeMessage(m);
                 this.addToLog(m);
+            }
         }
     },
+    storeMessage(m: Message) {
+        if (m == null)
+            return;
 
+        DataStore.get(KEYWORD_LOG_KEY).then(log => {
+            log = log ? log.map((e: string) => JSON.parse(e)) : [];
+
+            log.push(m);
+            if (log.length > settings.store.amountToKeep) {
+                log = log.slice(-settings.store.amountToKeep);
+            }
+
+            DataStore.set(KEYWORD_LOG_KEY, log.map(e => JSON.stringify(e)));
+        });
+    },
+    discardMessage(id: string) {
+        DataStore.get(KEYWORD_LOG_KEY).then((log: string[]) => {
+            let parsed_logs: Message[] = log ? log.map(e => JSON.parse(e)) : [];
+
+            parsed_logs = parsed_logs.filter(msg => msg.id !== id);
+
+            DataStore.set(KEYWORD_LOG_KEY, parsed_logs.map(e => JSON.stringify(e)));
+        });
+    },
     addToLog(m: Message) {
         if (m == null || keywordLog.some(e => e.id === m.id))
             return;
 
-        DataStore.get(KEYWORD_LOG_KEY).then(log => {
-            DataStore.set(KEYWORD_LOG_KEY, [...log, JSON.stringify(m)]);
-        });
+        let messageRecord: any;
+        try {
+            messageRecord = createMessageRecord(m);
+        } catch (err) {
+            console.error(err);
+            return;
+        }
 
-        const thing = createMessageRecord(m);
-        keywordLog.push(thing);
-        keywordLog.sort((a, b) => b.timestamp - a.timestamp);
+        keywordLog.push(messageRecord);
+        keywordLog.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
         while (keywordLog.length > settings.store.amountToKeep) {
             keywordLog.pop();
@@ -447,74 +363,82 @@ export default definePlugin({
 
     keywordTabBar() {
         return (
-            <TabBar.Item className={classes(tabClass.tab, tabClass.expanded)} id={8}>
+            <TabBar.Item className={classes(tabClass.tab)} id={8}>
                 Keywords
             </TabBar.Item>
         );
     },
 
-    tryKeywordMenu(setTab, onJump, closePopout) {
-        const header = (
-            <><MenuHeader tab={8} setTab={setTab} closePopout={closePopout} badgeState={{ badgeForYou: false }} />
-                <span>
-                    <Tooltip text="Clear All">
-                        {({ onMouseLeave, onMouseEnter }) => (
-                            <div className={classes(tabClass.controlButton, buttonClass.button, buttonClass.tertiary, buttonClass.size32)}
-                                onMouseLeave={onMouseLeave}
-                                onMouseEnter={onMouseEnter}
-                                onClick={() => {
-                                    keywordLog = [];
-                                    DataStore.set(KEYWORD_LOG_KEY, []);
-                                    this.onUpdate();
-                                }}>
-                                <DoubleCheckmarkIcon />
-                            </div>
-                        )}
-                    </Tooltip>
-                </span>
-            </>
+    keywordClearButton() {
+        return (
+            <Tooltip text="Clear All">
+                {({ onMouseLeave, onMouseEnter }) => (
+                    <Button
+                        variant="secondary"
+                        size="iconOnly"
+                        onMouseLeave={onMouseLeave}
+                        onMouseEnter={onMouseEnter}
+                        onClick={() => {
+                            keywordLog = [];
+                            DataStore.set(KEYWORD_LOG_KEY, []);
+                            this.onUpdate();
+                        }}>
+                        <DoubleCheckmarkIcon width={16} height={16} className={"vc-double-checkmark-icon"} />
+                    </Button>
+                )}
+            </Tooltip>
         );
+    },
 
-        const channel = ChannelStore.getChannel(SelectedChannelStore.getChannelId());
-
+    tryKeywordMenu(onJump) {
         const [tempLogs, setKeywordLog] = useState(keywordLog);
+        const navigatorScrollerRef = useRef<ScrollerBaseRef | null>(null);
+
+        const navigator = createNavigator("keywords", navigatorScrollerRef);
+
         this.onUpdate = () => {
             const newLog = Array.from(keywordLog);
             setKeywordLog(newLog);
         };
 
-        const messageRender = (e, t) => {
-            e._keyword = true;
+        const RenderMsgWrapper = (message: Message & { _keyword?: boolean; }): JSX.Element => {
+            message._keyword = true;
 
-            e.customRenderedContent = {
-                content: highlightKeywords(e.content, keywordEntries)
+            message.customRenderedContent = {
+                content: highlightKeywords(message.content, keywordEntries)
             };
 
-            const msg = this.renderMsg({
-                message: e,
-                gotoMessage: t,
-                dismissible: true
+            return this.RenderMsg({
+                message,
+                onJump,
             });
+        };
 
-            return [msg];
+        const MessageScrollerHelper = ({ children }: { children: (scrollerOpts: ScrollerOpts) => JSX.Element; }) => {
+            return children(getMessageScrollerOptions());
         };
 
         return (
-            <>
-                <Popout
-                    className={classes(recentMentionsPopoutClass.recentMentionsPopout)}
-                    renderHeader={() => header}
-                    renderMessage={messageRender}
-                    channel={channel}
-                    onJump={onJump}
-                    onFetch={() => null}
-                    onCloseMessage={this.deleteKeyword}
-                    loadMore={() => null}
-                    messages={tempLogs}
-                    renderEmptyState={() => null}
-                    canCloseAllMessages={true}
-                />
-            </>
+            <ErrorBoundary>
+                <PopoutContainer navigator={navigator}>
+                    <MessageScrollerHelper>
+                        {({ ref, ...restOpts }) => {
+                            return <ScrollerThin
+                                ref={thinScrollerRef => {
+                                    navigatorScrollerRef.current = thinScrollerRef;
+                                    // @ts-ignore
+                                    ref.current = thinScrollerRef?.getScrollerNode() ?? null;
+                                }}
+                                className={classes(scrollerClass.scroller)}
+                                onScroll={void 0}
+                                {...restOpts}
+                            >
+                                {tempLogs.map(m => <div key={m.id}>{RenderMsgWrapper(m)}</div>)}
+                            </ScrollerThin>;
+                        }}
+                    </MessageScrollerHelper>
+                </PopoutContainer>
+            </ErrorBoundary>
         );
     },
 

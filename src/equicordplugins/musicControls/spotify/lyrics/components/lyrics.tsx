@@ -4,12 +4,13 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { openModal } from "@utils/modal";
-import { ContextMenuApi, React, Text, TooltipContainer, useEffect, useState, useStateFromStores } from "@webpack/common";
+import { BaseText } from "@components/BaseText";
+import { TooltipContainer } from "@components/TooltipContainer";
+import { settings } from "@equicordplugins/musicControls/settings";
+import { SpotifyLrcStore } from "@equicordplugins/musicControls/spotify/lyrics/providers/store";
+import { SpotifyStore } from "@equicordplugins/musicControls/spotify/SpotifyStore";
+import { ContextMenuApi, openModal,React, useEffect, useState, useStateFromStores } from "@webpack/common";
 
-import { settings } from "../../../settings";
-import { SpotifyStore } from "../../SpotifyStore";
-import { SpotifyLrcStore } from "../providers/store";
 import { LyricsContextMenu } from "./ctxMenu";
 import { LyricsModal } from "./modal";
 import { cl, NoteSvg, useLyrics } from "./util";
@@ -19,7 +20,7 @@ const nextCl = cl("next");
 const currentCl = cl("current");
 
 function LyricsDisplay({ scroll = true }: { scroll?: boolean; }) {
-    const { ShowMusicNoteOnNoLyrics } = settings.use(["ShowMusicNoteOnNoLyrics"]);
+    const { showMusicNoteOnNoLyrics } = settings.use(["showMusicNoteOnNoLyrics"]);
     const { lyricsInfo, lyricRefs, currLrcIndex } = useLyrics({ scroll });
 
     const currentLyrics = lyricsInfo?.lyricsVersions[lyricsInfo.useLyric] || null;
@@ -41,14 +42,14 @@ function LyricsDisplay({ scroll = true }: { scroll?: boolean; }) {
         >
             {currentLyrics ? currentLyrics.map((line, i) => (
                 <div ref={lyricRefs[i]} key={i}>
-                    <Text
-                        variant={currLrcIndex === i ? "text-sm/normal" : "text-xs/normal"}
+                    <BaseText
+                        size={currLrcIndex === i ? "sm" : "xs"}
                         className={makeClassName(i)}
                     >
                         {line.text || NoteSvg()}
-                    </Text>
+                    </BaseText>
                 </div>
-            )) : ShowMusicNoteOnNoLyrics ? (
+            )) : showMusicNoteOnNoLyrics ? (
                 <TooltipContainer text="No synced lyrics found">
                     <NoteSvg />
                 </TooltipContainer>

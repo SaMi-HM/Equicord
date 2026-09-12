@@ -6,9 +6,9 @@
 
 import "./styles.css";
 
-import { migratePluginSettings } from "@api/Settings";
-import { classNameFactory } from "@api/Styles";
+import { migratePluginToSettings } from "@api/Settings";
 import { Devs, EquicordDevs } from "@utils/constants";
+import { classNameFactory } from "@utils/css";
 import { getCurrentChannel, getIntlMessage } from "@utils/discord";
 import definePlugin from "@utils/types";
 import { Channel, Message, User } from "@vencord/discord-types";
@@ -32,12 +32,14 @@ const genTagTypes = () => {
     return obj;
 };
 
-migratePluginSettings("MoreUserTags", "ExpandedUserTags");
+migratePluginToSettings(true, "MoreUserTags", "NoAppsAllowed", "noAppsAllowed");
+
 export default definePlugin({
     name: "MoreUserTags",
     description: "Adds tags for webhooks and moderative roles (owner, admin, etc.)",
-    authors: [Devs.Cyn, Devs.TheSun, Devs.RyanCaoDev, Devs.LordElias, Devs.AutumnVN, EquicordDevs.Hen],
-    dependencies: ["MemberListDecoratorsAPI", "NicknameIconsAPI", "MessageDecorationsAPI"],
+    dependencies: ["MemberListDecoratorsAPI", "MessageDecorationsAPI", "NicknameIconsAPI"],
+    tags: ["Appearance", "Chat"],
+    authors: [Devs.Cyn, Devs.TheSun, Devs.RyanCaoDev, Devs.LordElias, Devs.AutumnVN, EquicordDevs.Hen, EquicordDevs.meowabyte],
     settings,
     patches: [
         // Make discord actually use our tags
@@ -45,15 +47,27 @@ export default definePlugin({
             find: ".STAFF_ONLY_DM:",
             replacement: [
                 {
-                    match: /(?<=type:(\i).{10,1000}.REMIX.{10,100})default:(\i)=/,
+                    match: /(?<=type:(\i).*?\.BOT:.{0,25})default:(\i)=/,
                     replace: "default:$2=$self.getTagText($self.localTags[$1]);",
                 },
                 {
-                    match: /(?<=type:(\i).{10,1000}.REMIX.{10,100})\.BOT:(?=default:)/,
+                    match: /(?<=type:\i.*?)\.BOT:(?=default:)/,
                     replace: "$&return null;",
                     predicate: () => settings.store.dontShowBotTag
                 },
             ],
+        },
+        {
+            find: '"#{intl::APP_TAG::hash}":',
+            // This matches the intl bundle, english is always loaded as a fallback bundle
+            // if the users language is not english, we need to apply to both because the load order is random
+            all: true,
+            predicate: () => settings.store.noAppsAllowed,
+            replacement: {
+                match: /(#{intl::APP_TAG::hash}":\[").{0,30}("\])/,
+                replace: "$1BOT$2",
+                noWarn: true,
+            }
         }
     ],
     start() {

@@ -5,16 +5,15 @@
  */
 
 import { showNotification } from "@api/Notifications";
+import { settings } from "@equicordplugins/musicControls/settings";
+import { getLyrics } from "@equicordplugins/musicControls/tidal/lyrics/api";
+import { EnhancedLyric } from "@equicordplugins/musicControls/tidal/lyrics/types";
+import { TidalStore } from "@equicordplugins/musicControls/tidal/TidalStore";
 import { proxyLazyWebpack } from "@webpack";
 import { Flux, FluxDispatcher } from "@webpack/common";
 
-import { settings } from "../../../settings";
-import { TidalStore } from "../../TidalStore";
-import { getLyrics } from "../api";
-import { EnhancedLyric } from "../types";
-
 function showNotif(title: string, body: string) {
-    if (settings.store.ShowFailedToasts) {
+    if (settings.store.showFailedToasts) {
         showNotification({
             color: "#ee2902",
             title,
@@ -23,6 +22,8 @@ function showNotif(title: string, body: string) {
         });
     }
 }
+
+let tidalStoreChangeListener: (() => void) | undefined;
 
 export const TidalLrcStore = proxyLazyWebpack(() => {
     let lyrics: EnhancedLyric[] | null = null;
@@ -50,6 +51,14 @@ export const TidalLrcStore = proxyLazyWebpack(() => {
     }
 
     TidalStore.addChangeListener(handleTidalStoreChange);
+    tidalStoreChangeListener = handleTidalStoreChange;
 
     return store;
 });
+
+export function stopTidalLrcStore() {
+    if (tidalStoreChangeListener) {
+        TidalStore.removeChangeListener(tidalStoreChangeListener);
+        tidalStoreChangeListener = undefined;
+    }
+}

@@ -4,16 +4,15 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { classNameFactory } from "@api/Styles";
-import { findByPropsLazy } from "@webpack";
+import { settings } from "@equicordplugins/musicControls/settings";
+import { SpotifyLrcStore } from "@equicordplugins/musicControls/spotify/lyrics/providers/store";
+import { SyncedLyric } from "@equicordplugins/musicControls/spotify/lyrics/providers/types";
+import { SpotifyStore } from "@equicordplugins/musicControls/spotify/SpotifyStore";
+import { classNameFactory } from "@utils/css";
+import { findCssClassesLazy } from "@webpack";
 import { React, useEffect, useState, useStateFromStores } from "@webpack/common";
 
-import { settings } from "../../../settings";
-import { SpotifyStore } from "../../SpotifyStore";
-import { SpotifyLrcStore } from "../providers/store";
-import { SyncedLyric } from "../providers/types";
-
-export const scrollClasses = findByPropsLazy("auto", "customTheme");
+export const scrollClasses = findCssClassesLazy("auto", "customTheme");
 
 export const cl = classNameFactory("vc-spotify-lyrics-");
 
@@ -24,7 +23,6 @@ export function NoteSvg() {
         </svg>
     );
 }
-
 
 const getIndexes = (lyrics: SyncedLyric[], position: number, delay: number) => {
     const posInSec = (position + delay) / 1000;
@@ -68,7 +66,7 @@ export function useLyrics({ scroll = true }: { scroll?: boolean; } = {}) {
         ]);
     const lyricsInfo = useStateFromStores([SpotifyLrcStore], () => SpotifyLrcStore.lyricsInfo);
 
-    const { LyricDelay } = settings.use(["LyricDelay"]);
+    const { lyricDelay } = settings.use(["lyricDelay"]);
 
     const [currLrcIndex, setCurrLrcIndex] = useState<number | null>(null);
     const [nextLyric, setNextLyric] = useState<number | null>(null);
@@ -83,17 +81,16 @@ export function useLyrics({ scroll = true }: { scroll?: boolean; } = {}) {
         }
     }, [currentLyrics]);
 
-
     useEffect(() => {
         if (currentLyrics && position != null) {
-            const [currentIndex, nextLyricIndex] = getIndexes(currentLyrics, position, LyricDelay);
+            const [currentIndex, nextLyricIndex] = getIndexes(currentLyrics, position, lyricDelay);
             setCurrLrcIndex(currentIndex);
             setNextLyric(nextLyricIndex);
         } else {
             setCurrLrcIndex(null);
             setNextLyric(null);
         }
-    }, [currentLyrics, position, LyricDelay]);
+    }, [currentLyrics, position, lyricDelay]);
 
     useEffect(() => {
         if (scroll && currLrcIndex !== null) {

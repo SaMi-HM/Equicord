@@ -6,7 +6,7 @@
 
 import "./styles.css";
 
-import { classNameFactory } from "@api/Styles";
+import { classNameFactory } from "@utils/css";
 import { findComponentByCodeLazy } from "@webpack";
 import { ComponentType, HTMLAttributes } from "react";
 
@@ -31,7 +31,5 @@ type Spinner = ComponentType<Omit<HTMLAttributes<HTMLDivElement>, "children"> & 
 
 // https://github.com/Kyuuhachi/VencordPlugins/blob/main/MessageLinkTooltip/index.tsx#L11-L33
 export const Spinner = findComponentByCodeLazy('"pulsingEllipsis"') as unknown as Spinner;
-
-export const QrCodeIcon = findComponentByCodeLazy("0v3ZM20");
 
 export const cl = classNameFactory("qrlogin-");

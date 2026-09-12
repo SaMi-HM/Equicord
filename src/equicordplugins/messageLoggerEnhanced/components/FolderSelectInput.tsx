@@ -16,27 +16,29 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { classNameFactory } from "@api/Styles";
-import { copyWithToast } from "@utils/misc";
-import { Button, Forms, Toasts } from "@webpack/common";
+import { Button } from "@components/Button";
+import { Heading } from "@components/Heading";
+import { cl, Native, settings } from "@equicordplugins/messageLoggerEnhanced/index";
+import { DEFAULT_IMAGE_CACHE_DIR } from "@equicordplugins/messageLoggerEnhanced/utils/constants";
+import { copyWithToast } from "@utils/discord";
+import { classes } from "@utils/misc";
+import { findCssClassesLazy } from "@webpack";
+import { Toasts } from "@webpack/common";
 
-import { Native, settings } from "..";
-import { DEFAULT_IMAGE_CACHE_DIR } from "../utils/constants";
-
-const cl = classNameFactory("folder-upload");
+const inputClasses = findCssClassesLazy("input", "inputWrapper", "editable") as Record<string, string>;
 
 function createDirSelector(settingKey: "logsDir" | "imageCacheDir", successMessage: string) {
     return function DirSelector({ option }) {
         if (IS_WEB) return null;
 
         return (
-            <Forms.FormSection>
-                <Forms.FormTitle>{option.description}</Forms.FormTitle>
+            <section>
+                <Heading tag="h5">{option.description}</Heading>
                 <SelectFolderInput
                     settingsKey={settingKey}
                     successMessage={successMessage}
                 />
-            </Forms.FormSection>
+            </section>
         );
     };
 }
@@ -78,18 +80,18 @@ export function SelectFolderInput({ settingsKey, successMessage }: Props) {
     }
 
     return (
-        <div className={cl("-container")}>
-            <div onClick={() => copyWithToast(path)} className={cl("-input")}>
+        <div className={classes(cl("folder-upload-container"), inputClasses.input)}>
+            <div onClick={() => copyWithToast(path)} className={cl("folder-upload-input")}>
                 {path == null || path === DEFAULT_IMAGE_CACHE_DIR ? "Choose Folder" : getDirName(path)}
             </div>
             <Button
-                className={cl("-button")}
-                size={Button.Sizes.SMALL}
+                className={cl("folder-upload-button")}
+                size="small"
                 onClick={onFolderSelect}
             >
                 Browse
             </Button>
-        </div>
+        </div >
     );
 
 }

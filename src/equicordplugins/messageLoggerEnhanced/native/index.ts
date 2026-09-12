@@ -11,18 +11,17 @@ import { DATA_DIR } from "@main/utils/constants";
 import { dialog, IpcMainInvokeEvent, shell } from "electron";
 
 import { getSettings, saveSettings } from "./settings";
-export * from "./updater";
+export * from "./export";
+export * from "./import";
 
+import { blockedExts } from "../list";
 import { LoggedAttachment } from "../types";
-import { LOGS_DATA_FILENAME } from "../utils/constants";
+import { DEFAULT_ATTACHMENT_FILE_EXTENSIONS, LOGS_DATA_FILENAME } from "../utils/constants";
 import { ensureDirectoryExists, getAttachmentIdFromFilename, sleep } from "./utils";
 
 export { getSettings };
-
-// so we can filter the native helpers by this key
 export function messageLoggerEnhancedUniqueIdThingyIdkMan() { }
 
-// Map<attachmetId, path>()
 const nativeSavedImages = new Map<string, string>();
 export const getNativeSavedImages = () => nativeSavedImages;
 
@@ -31,8 +30,6 @@ let imageCacheDir: string;
 
 const getImageCacheDir = async () => imageCacheDir ?? await getDefaultNativeImageDir();
 const getLogsDir = async () => logsDir ?? await getDefaultNativeDataDir();
-
-
 
 export async function initDirs() {
     const { logsDir: ld, imageCacheDir: icd } = await getSettings();
@@ -68,9 +65,6 @@ export async function getImageNative(_event: IpcMainInvokeEvent, attachmentId: s
 export async function writeImageNative(_event: IpcMainInvokeEvent, filename: string, content: Uint8Array) {
     if (!filename || !content) return;
     const imageDir = await getImageCacheDir();
-
-    // returns the file name
-    // ../../someMalicousPath.png -> someMalicousPath
     const attachmentId = getAttachmentIdFromFilename(filename);
 
     const existingImage = nativeSavedImages.get(attachmentId);
@@ -90,13 +84,11 @@ export async function deleteFileNative(_event: IpcMainInvokeEvent, attachmentId:
     await unlink(imagePath);
 }
 
-
 export async function writeLogs(_event: IpcMainInvokeEvent, contents: string) {
     const logsDir = await getLogsDir();
 
     writeFile(path.join(logsDir, LOGS_DATA_FILENAME), contents);
 }
-
 
 export async function getDefaultNativeImageDir(): Promise<string> {
     return path.join(await getDefaultNativeDataDir(), "savedImages");
@@ -104,6 +96,10 @@ export async function getDefaultNativeImageDir(): Promise<string> {
 
 export async function getDefaultNativeDataDir(): Promise<string> {
     return path.join(DATA_DIR, "MessageLoggerData");
+}
+
+export async function getDefaultAttachmentFileExtensions(): Promise<string> {
+    return DEFAULT_ATTACHMENT_FILE_EXTENSIONS;
 }
 
 export async function chooseDir(event: IpcMainInvokeEvent, logKey: "logsDir" | "imageCacheDir") {
@@ -130,8 +126,8 @@ export async function chooseDir(event: IpcMainInvokeEvent, logKey: "logsDir" | "
     return dir;
 }
 
-export async function showItemInFolder(_event: IpcMainInvokeEvent, filePath: string) {
-    shell.showItemInFolder(filePath);
+export async function showItemInFolder(_event: IpcMainInvokeEvent) {
+    shell.showItemInFolder(await getImageCacheDir());
 }
 
 export async function chooseFile(_event: IpcMainInvokeEvent, title: string, filters: Electron.FileFilter[], defaultPath?: string) {
@@ -143,25 +139,36 @@ export async function chooseFile(_event: IpcMainInvokeEvent, title: string, filt
     return await readFile(path, "utf-8");
 }
 
-// doing it in native because you can only fetch images from the renderer
-// other types of files will cause cors issues
-export async function downloadAttachment(_event: IpcMainInvokeEvent, attachemnt: LoggedAttachment, attempts = 0, useOldUrl = false): Promise<{ error: string | null; path: string | null; }> {
+export async function downloadAttachment(_event: IpcMainInvokeEvent, attachment: LoggedAttachment, attempts = 0, useOldUrl = false): Promise<{ error: string | null; path: string | null; }> {
     try {
-        if (!attachemnt?.url || !attachemnt.oldUrl || !attachemnt?.id || !attachemnt?.fileExtension)
+        if (!attachment?.url || !attachment.oldUrl || !attachment?.id)
             return { error: "Invalid Attachment", path: null };
 
-        if (attachemnt.id.match(/[\\/.]/)) {
+        if (attachment.id.match(/[\\/.]/)) {
             return { error: "Invalid Attachment ID", path: null };
         }
 
-        const existingImage = nativeSavedImages.get(attachemnt.id);
+        const settings = await getSettings();
+        const allowedExtensionsStr = settings.attachmentFileExtensions?.trim() || "";
+        if (allowedExtensionsStr === "" || allowedExtensionsStr.toLowerCase() === "none") {
+            return { error: "All attachment downloads are currently blocked by settings configurations.", path: null };
+        }
+
+        const allowedList = allowedExtensionsStr.split(",").map((ext: string) => ext.trim().toLowerCase());
+        const cleanExt = attachment.fileExtension?.replace(".", "").toLowerCase();
+
+        if (!cleanExt || !allowedList.includes(cleanExt)) {
+            return { error: `File type .${cleanExt} is blocked by settings configurations.`, path: null };
+        }
+
+        const existingImage = nativeSavedImages.get(attachment.id);
         if (existingImage)
             return {
                 error: null,
                 path: existingImage
             };
 
-        const res = await fetch(useOldUrl ? attachemnt.oldUrl : attachemnt.url);
+        const res = await fetch(useOldUrl ? attachment.oldUrl : attachment.url);
 
         if (res.status !== 200) {
             if (res.status === 404 || res.status === 403 || res.status === 415)
@@ -170,23 +177,23 @@ export async function downloadAttachment(_event: IpcMainInvokeEvent, attachemnt:
             attempts++;
             if (attempts > 3) {
                 return {
-                    error: `Failed to get attachment ${attachemnt.id} for caching. too many attempts, error code ${res.status}`,
+                    error: `Failed to get attachment ${attachment.id} for caching. too many attempts, error code ${res.status}`,
                     path: null,
                 };
             }
 
             await sleep(1000);
-            return downloadAttachment(_event, attachemnt, attempts, useOldUrl);
+            return downloadAttachment(_event, attachment, attempts, useOldUrl);
         }
 
         const ab = await res.arrayBuffer();
         const imageCacheDir = await getImageCacheDir();
         await ensureDirectoryExists(imageCacheDir);
 
-        const finalPath = path.join(imageCacheDir, `${attachemnt.id}${attachemnt.fileExtension}`);
+        const finalPath = path.join(imageCacheDir, `${attachment.id}${attachment.fileExtension}`);
         await writeFile(finalPath, Buffer.from(ab));
 
-        nativeSavedImages.set(attachemnt.id, finalPath);
+        nativeSavedImages.set(attachment.id, finalPath);
 
         return {
             error: null,
@@ -197,4 +204,28 @@ export async function downloadAttachment(_event: IpcMainInvokeEvent, attachemnt:
         console.error(error);
         return { error: error.message, path: null };
     }
+}
+
+export async function updateAllowedExtensions(_event: IpcMainInvokeEvent, cleanExtensionsString: string | undefined) {
+    const settings = await getSettings();
+    const incomingRaw = cleanExtensionsString?.trim() || "";
+
+    if (incomingRaw === "") {
+        settings.attachmentFileExtensions = "none";
+        await saveSettings(settings);
+        return;
+    }
+
+    const validatedExtensions = incomingRaw
+        .split(",")
+        .map(ext => ext.trim().toLowerCase())
+        .filter(ext => ext.length > 0 && !blockedExts.includes(ext));
+
+    if (validatedExtensions.length === 0) {
+        settings.attachmentFileExtensions = "none";
+    } else {
+        settings.attachmentFileExtensions = validatedExtensions.join(",");
+    }
+
+    await saveSettings(settings);
 }

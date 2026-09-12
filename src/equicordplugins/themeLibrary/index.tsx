@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { ColorPaletteIcon } from "@components/Icons";
+import SettingsPlugin from "@plugins/_core/settings";
 import { EquicordDevs } from "@utils/constants";
+import { removeFromArray } from "@utils/misc";
 import definePlugin from "@utils/types";
 import { SettingsRouter } from "@webpack/common";
 
@@ -13,43 +16,25 @@ import { settings } from "./utils/settings";
 export default definePlugin({
     name: "ThemeLibrary",
     description: "A library of themes for Vencord.",
+    tags: ["Appearance", "Customisation"],
     authors: [EquicordDevs.Fafa],
     settings,
     toolboxActions: {
         "Open Theme Library": () => {
-            SettingsRouter.open("ThemeLibrary");
+            SettingsRouter.openUserSettings("equicord_theme_library_panel");
         },
     },
 
     start() {
-        const customSettingsSections = (
-            Vencord.Plugins.plugins.Settings as any as {
-                customSections: ((ID: Record<string, unknown>) => any)[];
-            }
-        ).customSections;
-
-        const ThemeSection = () => ({
-            section: "ThemeLibrary",
-            label: "Theme Library",
-            searchableTitles: ["Theme Library"],
-            element: require("./components/ThemeTab").default,
-            id: "ThemeSection",
+        SettingsPlugin.customEntries.push({
+            key: "equicord_theme_library",
+            title: "Theme Library",
+            Component: require("./components/ThemeTab").default,
+            Icon: ColorPaletteIcon
         });
-
-        customSettingsSections.push(ThemeSection);
     },
 
     stop() {
-        const customSettingsSections = (
-            Vencord.Plugins.plugins.Settings as any as {
-                customSections: ((ID: Record<string, unknown>) => any)[];
-            }
-        ).customSections;
-
-        const i = customSettingsSections.findIndex(
-            section => section({}).id === "ThemeSection"
-        );
-
-        if (i !== -1) customSettingsSections.splice(i, 1);
+        removeFromArray(SettingsPlugin.customEntries, e => e.key === "equicord_theme_library");
     },
 });

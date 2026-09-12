@@ -1,8 +1,15 @@
-[class^="buttons__"] > [class^="buttons__"]:not([class^="expression-picker"]) {
-    width: 150px;
-    margin-left: -15px;
+.vc-random-voice-record {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 
-[class^="micButtonParent__"] {
-    width: 16px;
+.vc-random-voice-keybind {
+    color: "var(--text-muted)"
+}
+
+.vc-random-voice-recording {
+    display: flex;
+    gap: 8px;
+    align-items: center;
 }

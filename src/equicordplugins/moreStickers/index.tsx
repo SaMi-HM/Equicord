@@ -6,35 +6,43 @@
 
 import "./style.css";
 
+import { definePluginSettings } from "@api/Settings";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { Devs, EquicordDevs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
 import { Channel } from "@vencord/discord-types";
 import { React } from "@webpack/common";
 
-import { PickerContent, PickerHeader, PickerSidebar, Settings, Wrapper } from "./components";
+import { Packs, PickerContent, PickerHeader, PickerSidebar, Wrapper } from "./components";
 import { getStickerPack, getStickerPackMetas } from "./stickers";
 import { StickerPack, StickerPackMeta } from "./types";
 import { cl, FFmpegStateContext, loadFFmpeg } from "./utils";
 
+export const settings = definePluginSettings({
+    promptToUpload: {
+        type: OptionType.BOOLEAN,
+        description: "Inserts the sticker into your chatbar instead of sending immediately",
+        default: false
+    },
+    packs: {
+        type: OptionType.COMPONENT,
+        description: "Packs",
+        component: Packs
+    }
+});
+
 export default definePlugin({
     name: "MoreStickers",
     description: "Adds sticker packs from other social media platforms. (e.g. LINE)",
+    tags: ["Chat", "Emotes", "Media"],
     authors: [EquicordDevs.Leko, Devs.Arjix],
-
-    options: {
-        settings: {
-            type: OptionType.COMPONENT,
-            description: "Packs",
-            component: Settings
-        }
-    },
+    settings,
 
     patches: [
         {
-            find: ".stickerButton)},",
+            find: "#{intl::STICKER_BUTTON_LABEL}",
             replacement: [{
-                match: /(children:\(0,\i\.jsx\)\()(.{0,10})({(className|innerClassName).{10,30}\.stickerButton)/,
+                match: /(children:\(0,\i\.jsx\)\()(.{0,10})({className:\i\(\)\(\i\.\i,\i\.\i)/,
                 replace: "$1arguments[0]?.stickersType?$self.stickerButton:$2$3"
             }, {
                 match: /(\i=)((\i\.useCallback\(\(\)=>\{\(.*?\)\().*?\.STICKER,(\i.{0,25}\]\)))/,
@@ -45,18 +53,24 @@ export default definePlugin({
             }]
         },
         {
-            find: ".gifts)",
-            replacement: {
-                match: /(?<=,.{0,5}\(null==\(\i=\i\.stickers\)\?void 0.*?(\i)\.push\((\(0,\i\.jsx\))\((.+?),{disabled:\i,type:(\i)},"sticker"\)\)\))/,
-                replace: ",arguments[0].type?.submit?.button&&$1.push($2($3,{disabled:!arguments[0].type?.submit?.button,type:$4,stickersType:\"stickers+\"},\"stickers+\"))"
-            }
+            find: '("ChannelTextAreaButtons")',
+            replacement: [
+                {
+                    match: /(?<=(,\i\.stickers\?\.button.{0,50}\i\.push\(\(.{0,100})\},"sticker"\)\))/,
+                    replace: "$1,stickersType:\"stickers+\"},\"stickers+\"))"
+                },
+            ]
         },
         {
             find: "#{intl::EXPRESSION_PICKER_CATEGORIES_A11Y_LABEL}",
             replacement: [
                 {
-                    match: /(?<=null,(\i)\?(\(.*?\))\((\i),{.{0,128},isActive:(\i)===.{0,200},children:(\i\.intl\.string\(.*?\))\}\)\}\):null,)/s,
-                    replace: '$1?$2($3,{id:"stickers+-picker-tab","aria-controls":"more-stickers-picker-tab-panel","aria-selected":$4==="stickers+",isActive:$4==="stickers+",autoFocus:true,viewType:"stickers+",children:$5+"+"}):null,'
+                    match: /(?<=(\i)\?(\(.{0,15}\))\((\i),\{.{0,150}(\i)===\i\.\i\.STICKER,.{0,150}children:(.{0,50}\.\i,children:.{0,50})\}\)\}\):null)/,
+                    replace: ',vcStickers=$1?$2($3,{id:"stickers+-picker-tab","aria-controls":"more-stickers-picker-tab-panel","aria-selected":$4==="stickers+",isActive:$4==="stickers+",autoFocus:true,viewType:"stickers+",children:$5+"+"})}):null'
+                },
+                {
+                    match: /children:\[\i,\i(?=.{0,150}\.SOUNDBOARD)/g,
+                    replace: "$&,vcStickers"
                 },
                 {
                     match: /:null,((.{1,200})===.{1,30}\.STICKER&&\w+\?(\([^()]{1,10}\)).{1,15}?(\{.*?,onSelectSticker:.*?\})\):null)/,
@@ -64,13 +78,6 @@ export default definePlugin({
                 }
             ]
         },
-        {
-            find: '==="remove_text"',
-            replacement: {
-                match: /,\i\.insertText=\i=>{[\w ;]*?1===\i\.length&&.+?==="remove_text"/,
-                replace: ",$self.textEditor=arguments[0]$&"
-            }
-        }
     ],
     stickerButton({
         innerClassName,

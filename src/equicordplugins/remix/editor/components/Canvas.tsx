@@ -4,11 +4,10 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { initInput } from "@equicordplugins/remix/editor/input";
+import { bounds } from "@equicordplugins/remix/editor/tools/crop";
+import { heightFromBounds, widthFromBounds } from "@equicordplugins/remix/editor/utils/canvas";
 import { useEffect, useRef } from "@webpack/common";
-
-import { initInput } from "../input";
-import { bounds } from "../tools/crop";
-import { heightFromBounds, widthFromBounds } from "../utils/canvas";
 
 export let canvas: HTMLCanvasElement | null = null;
 export let ctx: CanvasRenderingContext2D | null = null;
@@ -46,9 +45,11 @@ export const Canvas = ({ file }: { file: File; }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
     useEffect(() => {
+        const objectUrl = URL.createObjectURL(file);
         image = new Image();
-        image.src = URL.createObjectURL(file);
+        image.src = objectUrl;
         image.onload = () => {
+            URL.revokeObjectURL(objectUrl);
             canvas = canvasRef.current;
 
             if (!canvas) return;
@@ -67,7 +68,9 @@ export const Canvas = ({ file }: { file: File; }) => {
 
             initInput();
         };
-    });
+
+        return () => URL.revokeObjectURL(objectUrl);
+    }, [file]);
 
     return (<canvas ref={canvasRef} className="vc-remix-canvas"></canvas>);
 };

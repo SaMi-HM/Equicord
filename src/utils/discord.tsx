@@ -16,14 +16,14 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { MessageObject } from "@api/MessageEvents";
-import { Channel, Guild, GuildFeatures, Message, User } from "@vencord/discord-types";
-import { ChannelActionCreators, ChannelStore, ComponentDispatch, Constants, FluxDispatcher, GuildStore, i18n, IconUtils, InviteActions, MessageActions, RestAPI, SelectedChannelStore, SelectedGuildStore, UserProfileActions, UserProfileStore, UserSettingsActionCreators, UserUtils } from "@webpack/common";
+import type { MessageObject } from "@api/MessageEvents";
+import type { Channel, CloudUpload, Guild, GuildFeatures, MediaModalItem, MediaModalProps, Message, User } from "@vencord/discord-types";
+import { ChannelActionCreators, ChannelStore, ComponentDispatch, Constants, FluxDispatcher, GuildStore, i18n, InviteActions, MessageActions, openMediaModal, RestAPI, SelectedChannelStore, SelectedGuildStore, Toasts, UserProfileActions, UserProfileStore, UserSettingsActionCreators, UserUtils } from "@webpack/common";
 import { Except } from "type-fest";
 
+import { copyToClipboard } from "./clipboard";
 import { runtimeHashMessageKey } from "./intlHash";
 import { Logger } from "./Logger";
-import { MediaModalItem, MediaModalProps, openMediaModal } from "./modal";
 
 const IntlManagerLogger = new Logger("IntlManager");
 
@@ -90,8 +90,8 @@ export function getCurrentGuild(): Guild | undefined {
     return GuildStore.getGuild(getCurrentChannel()?.guild_id!);
 }
 
-export function openPrivateChannel(userId: string) {
-    ChannelActionCreators.openPrivateChannel(userId);
+export function openPrivateChannel(userId: string, navigateToChannel = true) {
+    return ChannelActionCreators.openPrivateChannel({ recipientIds: [userId], navigateToChannel });
 }
 
 export const enum Theme {
@@ -100,7 +100,11 @@ export const enum Theme {
 }
 
 export function getTheme(): Theme {
-    return UserSettingsActionCreators.PreloadedUserSettingsActionCreators.getCurrentValue()?.appearance?.theme;
+    try {
+        return UserSettingsActionCreators.PreloadedUserSettingsActionCreators.getCurrentValue()?.appearance?.theme;
+    } catch {
+        return Theme.Dark;
+    }
 }
 
 export function insertTextIntoChatInputBox(text: string) {
@@ -110,13 +114,36 @@ export function insertTextIntoChatInputBox(text: string) {
     });
 }
 
-interface MessageOptions {
+export async function copyWithToast(text: string, toastMessage = "Copied to clipboard!") {
+    await copyToClipboard(text);
+    Toasts.show({
+        message: toastMessage,
+        id: Toasts.genId(),
+        type: Toasts.Type.SUCCESS
+    });
+}
+
+export interface MessageOptions {
     messageReference: Message["messageReference"];
     allowedMentions: {
         parse: string[];
         replied_user: boolean;
     };
     stickerIds: string[];
+    attachmentsToUpload: CloudUpload[];
+    poll: {
+        allow_multiselect: boolean;
+        answers: Array<{
+            poll_media: {
+                text: string;
+                attachment_ids?: unknown;
+                emoji?: { name: string; id?: string; };
+            };
+        }>;
+        duration: number;
+        layout_type: number;
+        question: { text: string; };
+    };
 }
 
 export function sendMessage(
@@ -177,9 +204,9 @@ interface FetchUserProfileOptions {
 /**
  * Fetch a user's profile
  */
-export async function fetchUserProfile(id: string, options?: FetchUserProfileOptions) {
+export async function fetchUserProfile(id: string, options?: FetchUserProfileOptions, cache = true) {
     const cached = UserProfileStore.getUserProfile(id);
-    if (cached) return cached;
+    if (cached && cache) return cached;
 
     FluxDispatcher.dispatch({ type: "USER_PROFILE_FETCH_START", userId: id });
 
@@ -206,17 +233,6 @@ export async function fetchUserProfile(id: string, options?: FetchUserProfileOpt
  */
 export function getUniqueUsername(user: User) {
     return user.discriminator === "0" ? user.username : user.tag;
-}
-
-/**
- *  Get the URL for an emoji. This function always returns a gif URL for animated emojis, instead of webp
- * @param id The emoji id
- * @param animated Whether the emoji is animated
- * @param size The size for the emoji
- */
-export function getEmojiURL(id: string, animated: boolean, size: number) {
-    const url = IconUtils.getEmojiURL({ id, animated, size });
-    return animated ? url.replace(".webp", ".gif") : url;
 }
 
 // Discord has a similar function in their code

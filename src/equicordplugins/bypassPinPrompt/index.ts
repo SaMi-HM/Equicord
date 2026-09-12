@@ -4,46 +4,27 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { EquicordDevs } from "@utils/constants";
+import { Devs } from "@utils/constants";
 import definePlugin from "@utils/types";
 
 export default definePlugin({
     name: "BypassPinPrompt",
     description: "Bypass the pin prompt when using the pin functions",
-    authors: [EquicordDevs.thororen],
+    tags: ["Shortcuts"],
+    authors: [Devs.thororen],
     patches: [
-        {
-            find: '"Channel Pins"',
-            replacement: {
-                match: /(?<=(\i\.\i\.unpinMessage\(\i,\i\.id\)):)\i\.\i\.confirmUnpin\(\i,\i\)/,
-                replace: "$1"
-            }
-        },
-        {
-            find: 'source:"message-actions"',
+        ...[
+            'source:"message-actions"',
+            'id:"pin",action',
+            '"Channel Pins"',
+        ].map(find => ({
+            find,
             replacement: [
                 {
-                    match: /(?<=(\i\.\i\.pinMessage\(\i,\i\.id\)):)\i\.\i\.confirmPin\(\i,\i\)/,
-                    replace: "$1"
-                },
-                {
-                    match: /(?<=(\i\.\i\.unpinMessage\(\i,\i\.id\)):)\i\.\i\.confirmUnpin\(\i,\i\)/,
-                    replace: "$1"
+                    match: /(\i\.\i\.(?:unpin|pin)Message\(\i,\i\.id\)):\i\.\i\.confirm(?:Unpin|Pin)\(\i,\i\)/g,
+                    replace: "$1:$1"
                 }
             ]
-        },
-        {
-            find: 'id:"pin"',
-            replacement: [
-                {
-                    match: /(?<=(\i\.\i\.pinMessage\(\i,\i\.id\)):)\i\.\i\.confirmPin\(\i,\i\)/,
-                    replace: "$1"
-                },
-                {
-                    match: /(?<=(\i\.\i\.unpinMessage\(\i,\i\.id\)):)\i\.\i\.confirmUnpin\(\i,\i\)/,
-                    replace: "$1"
-                }
-            ]
-        },
+        }))
     ],
 });

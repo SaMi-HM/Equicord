@@ -6,15 +6,17 @@
 
 import { generateId } from "@api/Commands";
 import { Settings } from "@api/Settings";
-import { OpenExternalIcon } from "@components/Icons";
+import { Button } from "@components/Button";
+import { Card } from "@components/Card";
+import { HeadingPrimary } from "@components/Heading";
+import { Paragraph } from "@components/Paragraph";
+import type { Theme, ThemeLikeProps } from "@equicordplugins/themeLibrary/types";
 import { proxyLazy } from "@utils/lazy";
 import { Margins } from "@utils/margins";
-import { ModalContent, ModalFooter, ModalHeader, ModalRoot, ModalSize, openModal } from "@utils/modal";
 import { User } from "@vencord/discord-types";
-import { Button, Card, FluxDispatcher, Forms, Parser, React, UserStore, UserUtils } from "@webpack/common";
+import { FluxDispatcher, Modal, openModal, Parser, React, UserStore, UserUtils } from "@webpack/common";
 import { Constructor } from "type-fest";
 
-import type { Theme, ThemeLikeProps } from "../types";
 import { LikesComponent } from "./LikesComponent";
 import { ThemeInfoModal } from "./ThemeInfoModal";
 import { apiUrl } from "./ThemeTab";
@@ -54,7 +56,7 @@ export const ThemeCard: React.FC<ThemeCardProps> = ({ theme, themeLinks, likedTh
             : [...themeLinks, `${apiUrl}/${theme.id}`];
 
         setThemeLinks(onlineThemeLinks);
-        Vencord.Settings.themeLinks = onlineThemeLinks;
+        Settings.themeLinks = onlineThemeLinks;
     };
 
     const handleThemeAttributesCheck = () => {
@@ -62,38 +64,32 @@ export const ThemeCard: React.FC<ThemeCardProps> = ({ theme, themeLinks, likedTh
 
         if (requiresThemeAttributes && !Settings.plugins.ThemeAttributes.enabled) {
             openModal(modalProps => (
-                <ModalRoot {...modalProps} size={ModalSize.SMALL}>
-                    <ModalHeader>
-                        <Forms.FormTitle tag="h4">Hold on!</Forms.FormTitle>
-                    </ModalHeader>
-                    <ModalContent>
-                        <Forms.FormText style={{ padding: "8px" }}>
-                            <p>This theme requires the <b>ThemeAttributes</b> plugin to work properly!</p>
-                            <p>Do you want to enable it?</p>
-                        </Forms.FormText>
-                    </ModalContent>
-                    <ModalFooter>
-                        <Button
-                            look={Button.Looks.FILLED}
-                            color={Button.Colors.GREEN}
-                            onClick={() => {
+                <Modal
+                    {...modalProps}
+                    size="sm"
+                    title="Hold on!"
+                    actions={[
+                        {
+                            text: "Enable Plugin",
+                            variant: "primary",
+                            onClick: () => {
                                 Settings.plugins.ThemeAttributes.enabled = true;
                                 modalProps.onClose();
                                 handleAddRemoveTheme();
-                            }}
-                        >
-                            Enable Plugin
-                        </Button>
-                        <Button
-                            color={Button.Colors.RED}
-                            look={Button.Looks.FILLED}
-                            className={Margins.right8}
-                            onClick={() => modalProps.onClose()}
-                        >
-                            Cancel
-                        </Button>
-                    </ModalFooter>
-                </ModalRoot>
+                            }
+                        },
+                        {
+                            text: "Cancel",
+                            variant: "secondary",
+                            onClick: () => modalProps.onClose()
+                        }
+                    ]}
+                >
+                    <Paragraph style={{ padding: "8px" }}>
+                        <p>This theme requires the <b>ThemeAttributes</b> plugin to work properly!</p>
+                        <p>Do you want to enable it?</p>
+                    </Paragraph>
+                </Modal>
             ));
         } else {
             handleAddRemoveTheme();
@@ -114,33 +110,32 @@ export const ThemeCard: React.FC<ThemeCardProps> = ({ theme, themeLinks, likedTh
 
     return (
         <Card style={{ padding: ".5rem", marginBottom: ".5em", marginTop: ".5em", display: "flex", flexDirection: "column", backgroundColor: "var(--background-base-lower-alt)" }} key={theme.id}>
-            <Forms.FormTitle tag="h2" style={{ overflowWrap: "break-word", marginTop: 8 }} className="vce-theme-text">
+            <HeadingPrimary style={{ overflowWrap: "break-word", marginTop: "8px" }} className="vce-theme-text-title">
                 {theme.name}
-            </Forms.FormTitle>
-            <Forms.FormText className="vce-theme-text">
+            </HeadingPrimary>
+            <Paragraph className="vce-theme-text-description">
                 {Parser.parse(theme.description)}
-            </Forms.FormText>
+            </Paragraph>
             {!removePreview && (
                 <img role="presentation" src={theme.thumbnail_url} loading="lazy" alt={theme.name} className="vce-theme-info-preview" />
             )}
             <div className="vce-theme-info">
                 <div style={{ justifyContent: "flex-start", flexDirection: "column" }}>
                     {theme.tags && (
-                        <Forms.FormText>
+                        <Paragraph>
                             {theme.tags.map(tag => (
                                 <span className="vce-theme-info-tag" key={tag}>
                                     {tag}
                                 </span>
                             ))}
-                        </Forms.FormText>
+                        </Paragraph>
                     )}
                     {!removeButtons && (
                         <div style={{ marginTop: "8px", display: "flex", flexDirection: "row" }}>
                             <Button
                                 onClick={handleThemeAttributesCheck}
-                                size={Button.Sizes.MEDIUM}
-                                color={themeLinks.includes(`${apiUrl}/${theme.id}`) ? Button.Colors.RED : Button.Colors.GREEN}
-                                look={Button.Looks.FILLED}
+                                size="medium"
+                                variant={themeLinks.includes(`${apiUrl}/${theme.id}`) ? "dangerPrimary" : "positive"}
                                 className={Margins.right8}
                                 disabled={!theme.content || theme.id === "preview"}
                             >
@@ -154,22 +149,20 @@ export const ThemeCard: React.FC<ThemeCardProps> = ({ theme, themeLinks, likedTh
 
                                     openModal(props => <ThemeInfoModal {...props} author={authors} theme={theme} />);
                                 }}
-                                size={Button.Sizes.MEDIUM}
-                                color={Button.Colors.BRAND}
-                                look={Button.Looks.FILLED}
+                                size="medium"
+                                className={Margins.right8}
                             >
                                 Theme Info
                             </Button>
                             <LikesComponent themeId={theme.id} likedThemes={likedThemes} />
                             <Button
                                 onClick={handleViewSource}
-                                size={Button.Sizes.MEDIUM}
-                                color={Button.Colors.LINK}
-                                look={Button.Looks.LINK}
+                                size="medium"
+                                variant="link"
                                 disabled={!theme.content || theme.id === "preview"}
                                 style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
                             >
-                                View Source <OpenExternalIcon height={16} width={16} />
+                                View Source
                             </Button>
                         </div>
                     )}

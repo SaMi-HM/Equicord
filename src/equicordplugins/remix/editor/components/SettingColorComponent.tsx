@@ -4,13 +4,10 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-// brutally ripped out of usercss
-// (remove when usercss is merged)
-
 import "./colorStyles.css";
 
-import { classNameFactory } from "@api/Styles";
-import { ColorPicker, Forms } from "@webpack/common";
+import { classNameFactory } from "@utils/css";
+import { ColorPicker } from "@webpack/common";
 
 const cl = classNameFactory("vc-remix-settings-color-");
 
@@ -30,7 +27,7 @@ export function SettingColorComponent({ name, onChange, color }: Props) {
     }
 
     return (
-        <Forms.FormSection>
+        <section>
             <div className={cl("swatch-row")}>
                 <ColorPicker
                     key={name}
@@ -38,6 +35,6 @@ export function SettingColorComponent({ name, onChange, color }: Props) {
                     onChange={handleChange}
                 />
             </div>
-        </Forms.FormSection>
+        </section>
     );
 }

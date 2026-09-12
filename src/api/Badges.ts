@@ -17,8 +17,11 @@
 */
 
 import ErrorBoundary from "@components/ErrorBoundary";
-import BadgeAPIPlugin from "plugins/_api/badges";
+import globalBadges from "@equicordplugins/globalBadges";
+import BadgeAPIPlugin from "@plugins/_api/badges";
 import { ComponentType, HTMLProps } from "react";
+
+import { isPluginEnabled } from "./PluginManager";
 
 export const enum BadgePosition {
     START,
@@ -26,17 +29,21 @@ export const enum BadgePosition {
 }
 
 export interface ProfileBadge {
+    /**
+     * Badge id, unused by vencord, required by discord
+     */
+    id: string,
     /** The tooltip to show on hover. Required for image badges */
     description?: string;
     /** Custom component for the badge (tooltip not included) */
     component?: ComponentType<ProfileBadge & BadgeUserArgs>;
     /** The custom image to use */
-    image?: string;
+    iconSrc?: string;
     link?: string;
     /** Action to perform when you click the badge */
     onClick?(event: React.MouseEvent, props: ProfileBadge & BadgeUserArgs): void;
     /** Action to perform when you right click the badge */
-    onContextMenu?(event: React.MouseEvent, props: BadgeUserArgs & BadgeUserArgs): void;
+    onContextMenu?(event: React.MouseEvent, props: ProfileBadge & BadgeUserArgs): void;
     /** Should the user display this badge? */
     shouldShow?(userInfo: BadgeUserArgs): boolean;
     /** Optional props (e.g. style) for the badge, ignored for component badges */
@@ -47,7 +54,8 @@ export interface ProfileBadge {
     key?: string;
 
     /**
-     * Allows dynamically returning multiple badges
+     * Allows dynamically returning multiple badges.
+     * Must not call hooks
      */
     getBadges?(userInfo: BadgeUserArgs): ProfileBadge[];
 }
@@ -99,6 +107,18 @@ export function _getBadges(args: BadgeUserArgs) {
 
     const donorBadges = BadgeAPIPlugin.getDonorBadges(args.userId);
     const equicordDonorBadges = BadgeAPIPlugin.getEquicordDonorBadges(args.userId);
+    const GlobalBadges = isPluginEnabled(globalBadges.name) ? globalBadges.getGlobalBadges(args.userId) : false;
+
+    // do globalbadges first so it shows before the contrib badges but after donor badges
+    if (GlobalBadges) {
+        badges.unshift(
+            ...GlobalBadges.map(badge => ({
+                ...args,
+                ...badge,
+            }))
+        );
+    }
+
     if (donorBadges) {
         badges.unshift(
             ...donorBadges.map(badge => ({

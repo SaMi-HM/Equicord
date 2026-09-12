@@ -22,36 +22,44 @@ import "./settings";
 
 import { debounce } from "@shared/debounce";
 import { IpcEvents } from "@shared/IpcEvents";
-import { BrowserWindow, ipcMain, shell, systemPreferences } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell, systemPreferences } from "electron";
 import monacoHtml from "file://monacoWin.html?minify&base64";
-import { FSWatcher, mkdirSync, watch, writeFileSync } from "fs";
-import { open, readdir, readFile } from "fs/promises";
-import { join, normalize } from "path";
+import { FSWatcher, mkdirSync, readFileSync, watch, writeFileSync } from "fs";
+import { open, readdir, readFile, unlink } from "fs/promises";
+import { release } from "os";
+import { join } from "path";
 
 import { registerCspIpcHandlers } from "./csp/manager";
-import { ALLOWED_PROTOCOLS, QUICKCSS_PATH, SETTINGS_DIR, THEMES_DIR } from "./utils/constants";
+import { getThemeInfo, stripBOM, UserThemeHeader } from "./themes";
+import { ALLOWED_PROTOCOLS, QUICK_CSS_PATH, SETTINGS_DIR, THEMES_DIR } from "./utils/constants";
+import { ensureSafePath } from "./utils/ensureSafePath";
 import { makeLinksOpenExternally } from "./utils/externalLinks";
+
+const RENDERER_CSS_PATH = join(__dirname, "renderer.css");
 
 mkdirSync(THEMES_DIR, { recursive: true });
 
 registerCspIpcHandlers();
 
-export function ensureSafePath(basePath: string, path: string) {
-    const normalizedBasePath = normalize(basePath + "/");
-    const newPath = join(basePath, path);
-    const normalizedPath = normalize(newPath);
-    return normalizedPath.startsWith(normalizedBasePath) ? normalizedPath : null;
-}
-
 function readCss() {
-    return readFile(QUICKCSS_PATH, "utf-8").catch(() => "");
+    return readFile(QUICK_CSS_PATH, "utf-8").catch(() => "");
 }
 
-function listThemes(): Promise<{ fileName: string; content: string; }[]> {
-    return readdir(THEMES_DIR)
-        .then(files =>
-            Promise.all(files.map(async fileName => ({ fileName, content: await getThemeData(fileName) }))))
-        .catch(() => []);
+async function listThemes(): Promise<UserThemeHeader[]> {
+    const files = await readdir(THEMES_DIR).catch(() => []);
+
+    const themeInfo: UserThemeHeader[] = [];
+
+    for (const fileName of files) {
+        if (!fileName.endsWith(".css")) continue;
+
+        const data = await getThemeData(fileName).then(stripBOM).catch(() => null);
+        if (data == null) continue;
+
+        themeInfo.push(getThemeInfo(data, fileName));
+    }
+
+    return themeInfo;
 }
 
 function getThemeData(fileName: string) {
@@ -61,7 +69,7 @@ function getThemeData(fileName: string) {
     return readFile(safePath, "utf-8");
 }
 
-ipcMain.handle(IpcEvents.OPEN_QUICKCSS, () => shell.openPath(QUICKCSS_PATH));
+ipcMain.handle(IpcEvents.OPEN_QUICKCSS, () => shell.openPath(QUICK_CSS_PATH));
 
 ipcMain.handle(IpcEvents.OPEN_EXTERNAL, (_, url) => {
     try {
@@ -72,57 +80,90 @@ ipcMain.handle(IpcEvents.OPEN_EXTERNAL, (_, url) => {
     if (!ALLOWED_PROTOCOLS.includes(protocol))
         throw "Disallowed protocol.";
 
-    shell.openExternal(url);
+    shell.openExternal(url)
+        .catch(err => console.error("[Vencord] Failed to open external link", url, err));
 });
 
 ipcMain.handle(IpcEvents.GET_QUICK_CSS, () => readCss());
 ipcMain.handle(IpcEvents.SET_QUICK_CSS, (_, css) =>
-    writeFileSync(QUICKCSS_PATH, css)
+    writeFileSync(QUICK_CSS_PATH, css)
 );
 
-ipcMain.handle(IpcEvents.GET_THEMES_DIR, () => THEMES_DIR);
 ipcMain.handle(IpcEvents.GET_THEMES_LIST, () => listThemes());
 ipcMain.handle(IpcEvents.GET_THEME_DATA, (_, fileName) => getThemeData(fileName));
-ipcMain.handle(IpcEvents.GET_THEME_SYSTEM_VALUES, () => ({
-    // win & mac only
-    "os-accent-color": `#${systemPreferences.getAccentColor?.() || ""}`
-}));
+ipcMain.handle(IpcEvents.DELETE_THEME, (_, fileName) => {
+    const safePath = ensureSafePath(THEMES_DIR, fileName);
+    if (!safePath) return Promise.reject(`Unsafe path ${fileName}`);
+    return unlink(safePath);
+});
+ipcMain.handle(IpcEvents.GET_THEME_SYSTEM_VALUES, () => {
+    let accentColor = systemPreferences.getAccentColor?.() ?? "";
+
+    if (accentColor.length && accentColor[0] !== "#") {
+        accentColor = `#${accentColor}`;
+    }
+
+    return {
+        "os-accent-color": accentColor
+    };
+});
 
 ipcMain.handle(IpcEvents.OPEN_THEMES_FOLDER, () => shell.openPath(THEMES_DIR));
 ipcMain.handle(IpcEvents.OPEN_SETTINGS_FOLDER, () => shell.openPath(SETTINGS_DIR));
 
-export function initIpc(mainWindow: BrowserWindow) {
-    let quickCssWatcher: FSWatcher | undefined;
+let fsWatchers = [] as FSWatcher[];
 
-    open(QUICKCSS_PATH, "a+").then(fd => {
+ipcMain.handle(IpcEvents.INIT_FILE_WATCHERS, ({ sender }) => {
+    fsWatchers.forEach(w => w.close());
+
+    let quickCssWatcher: FSWatcher | undefined;
+    let rendererCssWatcher: FSWatcher | undefined;
+
+    open(QUICK_CSS_PATH, "a+").then(fd => {
         fd.close();
-        quickCssWatcher = watch(QUICKCSS_PATH, { persistent: false }, debounce(async () => {
-            mainWindow.webContents.postMessage(IpcEvents.QUICK_CSS_UPDATE, await readCss());
+        quickCssWatcher = watch(QUICK_CSS_PATH, { persistent: false }, debounce(async () => {
+            sender.postMessage(IpcEvents.QUICK_CSS_UPDATE, await readCss());
         }, 50));
     }).catch(() => { });
 
     const themesWatcher = watch(THEMES_DIR, { persistent: false }, debounce(() => {
-        mainWindow.webContents.postMessage(IpcEvents.THEME_UPDATE, void 0);
+        sender.postMessage(IpcEvents.THEME_UPDATE, void 0);
     }));
 
-    mainWindow.once("closed", () => {
+    if (IS_DEV) {
+        rendererCssWatcher = watch(RENDERER_CSS_PATH, { persistent: false }, async () => {
+            sender.postMessage(IpcEvents.RENDERER_CSS_UPDATE, await readFile(RENDERER_CSS_PATH, "utf-8"));
+        });
+    }
+
+    fsWatchers = [quickCssWatcher, themesWatcher, rendererCssWatcher].filter(Boolean) as FSWatcher[];
+
+    sender.once("destroyed", () => {
         quickCssWatcher?.close();
         themesWatcher.close();
+        rendererCssWatcher?.close();
+        fsWatchers = [];
     });
-}
+});
+
+ipcMain.on(IpcEvents.GET_MONACO_THEME, e => {
+    e.returnValue = nativeTheme.shouldUseDarkColors ? "vs-dark" : "vs-light";
+});
+
+let monacoWin: BrowserWindow | null = null;
 
 ipcMain.handle(IpcEvents.OPEN_MONACO_EDITOR, async () => {
-    const title = "Equicord QuickCSS Editor";
-    const existingWindow = BrowserWindow.getAllWindows().find(w => w.title === title);
-    if (existingWindow && !existingWindow.isDestroyed()) {
-        existingWindow.focus();
+    if (monacoWin && !monacoWin.isDestroyed()) {
+        monacoWin.show();
+        monacoWin.focus();
         return;
     }
 
-    const win = new BrowserWindow({
-        title,
+    monacoWin = new BrowserWindow({
+        title: "Equicord QuickCSS Editor",
         autoHideMenuBar: true,
         darkTheme: true,
+        backgroundColor: nativeTheme.shouldUseDarkColors ? "#1e1e1e" : "white",
         webPreferences: {
             preload: join(__dirname, "preload.js"),
             contextIsolation: true,
@@ -131,7 +172,38 @@ ipcMain.handle(IpcEvents.OPEN_MONACO_EDITOR, async () => {
         }
     });
 
-    makeLinksOpenExternally(win);
+    monacoWin.once("closed", () => { monacoWin = null; });
 
-    await win.loadURL(`data:text/html;base64,${monacoHtml}`);
+    makeLinksOpenExternally(monacoWin);
+
+    await monacoWin.loadURL(`data:text/html;base64,${monacoHtml}`);
+});
+
+app.on("before-quit", async event => {
+    if (monacoWin && !monacoWin.isDestroyed() && !monacoWin.isVisible()) {
+        const result = await dialog.showMessageBox({
+            type: "question",
+            buttons: ["Cancel", "Close Anyway"],
+            defaultId: 0,
+            title: "QuickCSS Editor Open",
+            message: "QuickCSS editor is still open in the background.",
+            detail: "Do you want to close Discord anyway? This will also close the QuickCSS editor."
+        });
+
+        if (result.response === 1) {
+            app.exit();
+        }
+    }
+});
+
+ipcMain.handle(IpcEvents.GET_RENDERER_CSS, () => readFile(RENDERER_CSS_PATH, "utf-8"));
+
+if (IS_DISCORD_DESKTOP) {
+    ipcMain.on(IpcEvents.PRELOAD_GET_RENDERER_JS, e => {
+        e.returnValue = readFileSync(join(__dirname, "renderer.js"), "utf-8");
+    });
+}
+
+ipcMain.on(IpcEvents.SUPPORTS_WINDOWS_MATERIAL, e => {
+    e.returnValue = process.platform === "win32" && Number(release().split(".")[2]) >= 22621;
 });

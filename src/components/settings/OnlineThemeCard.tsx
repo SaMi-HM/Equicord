@@ -18,10 +18,11 @@
 
 import "./AddonCard.css";
 
-import { classNameFactory } from "@api/Styles";
-import { AddonBadge } from "@components/settings/PluginBadge";
-import { Switch } from "@components/settings/Switch";
-import { Text, useRef } from "@webpack/common";
+import { Badge } from "@components/Badge";
+import { BaseText } from "@components/BaseText";
+import { Switch } from "@components/settings";
+import { classNameFactory } from "@utils/css";
+import { useRef } from "@webpack/common";
 import type { MouseEventHandler, ReactNode } from "react";
 
 import { EditableText } from "./EditableText";
@@ -76,7 +77,7 @@ export function OnlineThemeCard({
         >
             <div className={cl("header")}>
                 <div className={cl("name-author")}>
-                    <Text variant="text-md/bold" className={cl("name")}>
+                    <BaseText size="md" weight="bold" className={cl("name")}>
                         <div ref={titleContainerRef} className={cl("title-container")}>
                             <div
                                 ref={titleRef}
@@ -100,13 +101,13 @@ export function OnlineThemeCard({
                                 )}
                             </div>
                         </div>
-                        {isNew && <AddonBadge text="NEW" color="#ED4245" />}
-                    </Text>
+                        {isNew && <Badge text="NEW" variant="danger" />}
+                    </BaseText>
 
                     {!!author && (
-                        <Text variant="text-md/normal" className={cl("author")}>
+                        <BaseText size="md" color="text-subtle" className={cl("author")}>
                             {author}
-                        </Text>
+                        </BaseText>
                     )}
                 </div>
 
@@ -128,7 +129,7 @@ export function OnlineThemeCard({
                 {truncated}
             </div>
 
-            {footer}
+            {footer && <div className={cl("footer")}>{footer}</div>}
         </div>
     );
 }

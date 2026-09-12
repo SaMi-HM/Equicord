@@ -11,23 +11,23 @@ import { findByCodeLazy, findByPropsLazy } from "@webpack";
 import { ChannelStore, GuildStore, RelationshipStore, UserStore } from "@webpack/common";
 
 const { getName } = findByPropsLazy("getName", "useName", "getNickname");
-const computeChannelName = findByCodeLazy(".isThread())return'\"'.concat(");
+const computeChannelName = findByCodeLazy(".isThread())return`\"");
 
 const ChannelTypes = findByPropsLazy("DM", "GUILD_TEXT", "PUBLIC_THREAD", "UNKNOWN");
 const ChannelTypesSets = findByPropsLazy("THREADS", "GUILD_TEXTUAL", "ALL_DMS");
 const MessageTypes = findByPropsLazy("REPLY", "STAGE_RAISE_HAND", "CHANNEL_NAME_CHANGE");
 
-
 export default definePlugin({
     name: "NotificationTitle",
     description: "Makes desktop notifications more informative",
+    tags: ["Appearance", "Notifications"],
     authors: [Devs.Kyuuhachi],
 
     patches: [
         {
             find: '"SystemMessageUtils.stringify(...) could not convert"',
             replacement: {
-                match: /{icon:.{0,45}body:\i}/,
+                match: /{icon:.{0,50}emoji:\i}/,
                 replace: "($self.makeTitle($&,...arguments))",
             }
         },
@@ -58,8 +58,6 @@ export default definePlugin({
             title += `\n(${where})`;
         }
         result.title = title;
-
-        console.log({ ...result, channel, message, user });
 
         return result;
     }

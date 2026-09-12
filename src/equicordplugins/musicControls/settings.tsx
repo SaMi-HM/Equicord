@@ -6,8 +6,12 @@
 
 import { definePluginSettings } from "@api/Settings";
 import { disableStyle, enableStyle } from "@api/Styles";
+import { ButtonCompat } from "@components/Button";
+import { HeadingSecondary } from "@components/Heading";
+import { Paragraph } from "@components/Paragraph";
+import { SettingsSection } from "@components/settings/tabs/plugins/components/Common";
 import { makeRange, OptionType } from "@utils/types";
-import { Button, Forms, MaskedLink, showToast, Toasts } from "@webpack/common";
+import { MaskedLink, Select, showToast, TextInput, Toasts } from "@webpack/common";
 
 import hoverOnlyStyle from "./hoverOnly.css?managed";
 import { clearLyricsCache, removeTranslations } from "./spotify/lyrics/api";
@@ -25,12 +29,53 @@ export function toggleHoverControls(value: boolean) {
 
 function InstallInstructions() {
     return (
-        <Forms.FormSection>
-            <Forms.FormTitle tag="h3">How to install</Forms.FormTitle>
-            <Forms.FormText>
+        <section>
+            <HeadingSecondary>How to install</HeadingSecondary>
+            <Paragraph>
                 Install <MaskedLink href="https://github.com/Inrixia/TidaLuna#installation">TidaLuna</MaskedLink> from here, then go to TidalLuna settings &rarr; Plugin stores &rarr; Install <code>@vmohammad/api</code>
-            </Forms.FormText>
-        </Forms.FormSection>
+            </Paragraph>
+        </section>
+    );
+}
+
+function LyricsProviderSettings() {
+    const { store } = settings;
+
+    return (
+        <>
+            <SettingsSection id="lyrics-provider" name="Lyrics Provider" description="Where lyrics are fetched from.">
+                <Select
+                    options={[
+                        { value: Provider.Lrclib, label: "LRCLIB", default: true },
+                        { value: Provider.Spotify, label: "Spotify (Musixmatch)" },
+                    ]}
+                    isSelected={v => v === store.lyricsProvider}
+                    select={v => { store.lyricsProvider = v as Provider; }}
+                    serialize={v => v}
+                    placeholder="Select a lyrics provider"
+                />
+            </SettingsSection>
+
+            {store.lyricsProvider === Provider.Spotify && (
+                <SettingsSection
+                    id="spotify-lyrics-provider"
+                    name="Spotify Lyrics API Base URL"
+                    description="Custom instance base URL (for example: http://localhost:8080)."
+                >
+                    <TextInput
+                        type="text"
+                        value={store.spotifyLyricsApiUrl}
+                        onChange={v => {
+                            store.spotifyLyricsApiUrl = v;
+                            void clearLyricsCache();
+                            showToast("Lyrics cache purged", Toasts.Type.SUCCESS);
+                        }}
+                        placeholder="https://spotify-lyrics-api-pi.vercel.app"
+                        maxLength={null}
+                    />
+                </SettingsSection>
+            )}
+        </>
     );
 }
 
@@ -41,12 +86,12 @@ export const settings = definePluginSettings({
         default: false,
         onChange: v => toggleHoverControls(v)
     },
-    ShowMusicNoteOnNoLyrics: {
+    showMusicNoteOnNoLyrics: {
         description: "Show a music note icon when no lyrics are found",
         type: OptionType.BOOLEAN,
         default: true,
     },
-    LyricsPosition: {
+    lyricsPosition: {
         description: "Position of the lyrics",
         type: OptionType.SELECT,
         options: [
@@ -54,15 +99,30 @@ export const settings = definePluginSettings({
             { value: "below", label: "Below  Player(s)", default: true },
         ],
     },
-    LyricsProvider: {
+    lyricsProvider: {
         description: "Where lyrics are fetched from",
         type: OptionType.SELECT,
         options: [
-            { value: Provider.Spotify, label: "Spotify (Musixmatch)", default: true },
-            { value: Provider.Lrclib, label: "LRCLIB" },
+            { value: Provider.Lrclib, label: "LRCLIB", default: true },
+            { value: Provider.Spotify, label: "Spotify (Musixmatch)" },
         ],
+        hidden: true,
     },
-    TranslateTo: {
+    spotifyLyricsApiUrl: {
+        type: OptionType.STRING,
+        description: "Spotify lyrics API base URL.",
+        hidden: true,
+        default: "https://spotify-lyrics-api-pi.vercel.app",
+        onChange: async () => {
+            await clearLyricsCache();
+            showToast("Lyrics cache purged", Toasts.Type.SUCCESS);
+        }
+    },
+    lyricsProviderSettings: {
+        type: OptionType.COMPONENT,
+        component: LyricsProviderSettings,
+    },
+    translateTo: {
         description: "Translate lyrics to - Changing this will clear existing translations",
         type: OptionType.SELECT,
         options: languages,
@@ -71,7 +131,7 @@ export const settings = definePluginSettings({
             showToast("Translations cleared", Toasts.Type.SUCCESS);
         }
     },
-    LyricsConversion: {
+    lyricsConversion: {
         description: "Automatically translate or romanize lyrics",
         type: OptionType.SELECT,
         options: [
@@ -80,43 +140,43 @@ export const settings = definePluginSettings({
             { value: Provider.Romanized, label: "Romanize" },
         ]
     },
-    FallbackProvider: {
+    fallbackProvider: {
         description: "When a lyrics provider fails, try other providers",
         type: OptionType.BOOLEAN,
         default: true,
     },
-    ShowFailedToasts: {
+    showFailedToasts: {
         description: "Hide toasts when lyrics fail to fetch",
         type: OptionType.BOOLEAN,
         default: true,
     },
-    LyricDelay: {
+    lyricDelay: {
         description: "",
         type: OptionType.SLIDER,
         default: 0,
         ...sliderOptions
     },
-    PurgeLyricsCache: {
+    purgeLyricsCache: {
         description: "Purge the lyrics cache",
         type: OptionType.COMPONENT,
         component: () => (
-            <Button
-                color={Button.Colors.RED}
+            <ButtonCompat
+                color={ButtonCompat.Colors.RED}
                 onClick={() => {
                     clearLyricsCache();
                     showToast("Lyrics cache purged", Toasts.Type.SUCCESS);
                 }}
             >
                 Purge Cache
-            </Button>
+            </ButtonCompat>
         ),
     },
-    SpotifySectionTitle: {
+    spotifySectionTitle: {
         type: OptionType.COMPONENT,
         component: () => (
-            <Forms.FormSection>
-                <Forms.FormTitle tag="h3">Spotify</Forms.FormTitle>
-            </Forms.FormSection>
+            <section>
+                <HeadingSecondary>Spotify</HeadingSecondary>
+            </section>
         )
     },
     showSpotifyControls: {
@@ -140,12 +200,12 @@ export const settings = definePluginSettings({
         default: true
     },
 
-    TidalSectionTitle: {
+    tdalSectionTitle: {
         type: OptionType.COMPONENT,
         component: () => (
-            <Forms.FormSection>
-                <Forms.FormTitle tag="h3">Tidal</Forms.FormTitle>
-            </Forms.FormSection>
+            <section>
+                <HeadingSecondary>Tidal</HeadingSecondary>
+            </section>
         )
     },
     installTidalWithWS: {
@@ -162,31 +222,10 @@ export const settings = definePluginSettings({
         type: OptionType.BOOLEAN,
         default: false,
     },
-    TidalLyricFetch: {
-        description: "Custom URL for fetching lyrics",
+    websocketURL: {
         type: OptionType.STRING,
-        default: "https://api.vmohammad.dev/",
-        placeholder: "https://api.vmohammad.dev/",
-        onChange: (value: string) => {
-            if (!value.endsWith("/")) {
-                value += "/";
-            }
-            if (URL.canParse(value)) {
-                settings.store.TidalLyricFetch = value;
-            } else {
-                showToast("Invalid URL format for CustomUrl: " + value, Toasts.Type.FAILURE);
-                settings.store.TidalLyricFetch = "https://api.vmohammad.dev/";
-            }
-        }
-    },
-    TidalSyncMode: {
-        description: "Lyrics sync mode",
-        type: OptionType.SELECT,
-        options: [
-            { value: "line", label: "Line", default: true },
-            { value: "word", label: "Word" },
-            { value: "character", label: "Character" },
-        ],
-        default: "line",
-    },
+        description: "Default is ws://localhost:24123",
+        default: "ws://localhost:24123",
+        restartNeeded: true,
+    }
 });

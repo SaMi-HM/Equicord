@@ -193,6 +193,7 @@ async function playSound(buffer: AudioBuffer, volume: number) {
 export default definePlugin({
     name: "Animalese",
     description: "Plays animal crossing animalese for every message sent (they yap a lot)",
+    tags: ["Customisation", "Fun"],
     authors: [EquicordDevs.ryanamay, EquicordDevs.Mocha],
     settings,
 
@@ -222,16 +223,11 @@ export default definePlugin({
         }
     },
 
-    start() {
-        // Only subscribe once!
-        const init = async () => {
-            if (!audioContext) {
-                audioContext = new AudioContext();
-                await initSoundBuffers();
-            }
-            init();
-        };
-        init();
+    async start() {
+        if (!audioContext) {
+            audioContext = new AudioContext();
+            await initSoundBuffers();
+        }
     },
 
     stop() {

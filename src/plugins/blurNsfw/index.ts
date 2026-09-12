@@ -4,22 +4,43 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { Settings } from "@api/Settings";
+import { definePluginSettings } from "@api/Settings";
+import { managedStyleRootNode } from "@api/Styles";
 import { Devs } from "@utils/constants";
+import { createAndAppendStyle } from "@utils/css";
 import definePlugin, { OptionType } from "@utils/types";
 
 let style: HTMLStyleElement;
 
+const settings = definePluginSettings({
+    blurAmount: {
+        type: OptionType.NUMBER,
+        description: "Blur Amount (in pixels)",
+        default: 10,
+        onChange: setCss
+    },
+    blurAllChannels: {
+        type: OptionType.BOOLEAN,
+        description: "Blur attachments in all channels (not just NSFW)",
+        default: false
+    },
+});
+
 function setCss() {
     style.textContent = `
-        .vc-nsfw-img [class^=imageContainer],
-        .vc-nsfw-img [class^=wrapperPaused] {
-            filter: blur(${Settings.plugins.BlurNSFW.blurAmount}px);
+        .vc-nsfw-img [class*=imageContainer] img,
+        .vc-nsfw-img [class*=imageContainer] video,
+        .vc-nsfw-img [class*=wrapperPaused] img,
+        .vc-nsfw-img [class*=wrapperPaused] video {
+            filter: blur(${settings.store.blurAmount}px);
             transition: filter 0.2s;
+        }
 
-            &:hover {
-                filter: blur(0);
-            }
+        .vc-nsfw-img [class*=imageContainer]:hover img,
+        .vc-nsfw-img [class*=imageContainer]:hover video,
+        .vc-nsfw-img [class*=wrapperPaused]:hover img,
+        .vc-nsfw-img [class*=wrapperPaused]:hover video {
+            filter: blur(0);
         }
         `;
 }
@@ -27,36 +48,25 @@ function setCss() {
 export default definePlugin({
     name: "BlurNSFW",
     description: "Blur attachments in NSFW channels until hovered",
+    tags: ["Privacy", "Appearance"],
     authors: [Devs.Ven],
+    isModified: true,
+    settings,
 
     patches: [
         {
-            find: "}renderEmbeds(",
-            replacement: [{
-                match: /\.container/,
-                replace: "$&+(this.props.channel.nsfw || Vencord.Settings.plugins.BlurNSFW.blurAllChannels ? ' vc-nsfw-img': '')"
-            }]
+            find: "}renderStickersAccessories(",
+            replacement: [
+                {
+                    match: /(\.renderReactions\(\i\).+?className:)/,
+                    replace: '$&(this?.props?.channel?.nsfw || $self.settings.store.blurAllChannels ? "vc-nsfw-img ": "")+'
+                }
+            ]
         }
     ],
 
-    options: {
-        blurAmount: {
-            type: OptionType.NUMBER,
-            description: "Blur Amount (in pixels)",
-            default: 10,
-            onChange: setCss
-        },
-        blurAllChannels: {
-            type: OptionType.BOOLEAN,
-            description: "Blur attachments in all channels (not just NSFW)",
-            default: false
-        }
-    },
-
     start() {
-        style = document.createElement("style");
-        style.id = "VcBlurNsfw";
-        document.head.appendChild(style);
+        style = createAndAppendStyle("VcBlurNsfw", managedStyleRootNode);
 
         setCss();
     },

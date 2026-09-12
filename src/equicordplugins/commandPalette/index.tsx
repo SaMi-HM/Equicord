@@ -1,142 +1,93 @@
 /*
  * Vencord, a Discord client mod
- * Copyright (c) 2024 Vendicated and contributors
+ * Copyright (c) 2026 Vendicated and contributors
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { definePluginSettings } from "@api/Settings";
-import { classNameFactory } from "@api/Styles";
-import { Devs } from "@utils/constants";
-import { closeAllModals } from "@utils/modal";
-import definePlugin, { OptionType } from "@utils/types";
-import { SettingsRouter, useState } from "@webpack/common";
+import "./style.css";
 
-import { registerAction } from "./commands";
-import { openCommandPalette } from "./components/CommandPalette";
+import { EquicordDevs } from "@utils/constants";
+import definePlugin from "@utils/types";
 
-const cl = classNameFactory("vc-command-palette-");
-let isRecordingGlobal: boolean = false;
+import { clearRegistry, getCommandById } from "./api/registry";
+import type { PaletteContext } from "./api/types";
+import { registerBuiltinCommands } from "./commands";
+import { DEFAULT_HOTKEY, settings } from "./settings";
+import { loadAliases } from "./state/aliases";
+import { loadFrecency, recordUse } from "./state/frecency";
+import { getAllHotkeys, loadHotkeys } from "./state/hotkeys";
+import { loadPins } from "./state/pins";
+import { comboEquals, comboFromEvent, installKeyboardListeners, isEditableTarget, removeKeyboardListeners, setGlobalKeyHandler } from "./ui/keyboard";
+import { closePalette, openPalette, togglePalette } from "./ui/openPalette";
 
-export const settings = definePluginSettings({
-    hotkey: {
-        description: "The hotkey to open the command palette.",
-        type: OptionType.COMPONENT,
-        default: ["Control", "Shift", "P"],
-        component: () => {
-            const [isRecording, setIsRecording] = useState(false);
+const headlessCtx: PaletteContext = {
+    close() { },
+    pop() { },
+    push: entry => openPalette(entry),
+    setQuery() { }
+};
 
-            const recordKeybind = (setIsRecording: (value: boolean) => void) => {
-                const keys: Set<string> = new Set();
-                const keyLists: string[][] = [];
+const MODIFIER_KEYS = ["meta", "ctrl", "shift", "alt"];
 
-                setIsRecording(true);
-                isRecordingGlobal = true;
+function hasModifier(combo: string[]) {
+    return combo.some(key => MODIFIER_KEYS.includes(key) && key !== "shift");
+}
 
-                const updateKeys = () => {
-                    if (keys.size === 0 || !document.querySelector(`.${cl("key-recorder-button")}`)) {
-                        const longestArray = keyLists.reduce((a, b) => a.length > b.length ? a : b);
-                        if (longestArray.length > 0) {
-                            settings.store.hotkey = longestArray.map(key => key.toLowerCase());
-                        }
-                        setIsRecording(false);
-                        isRecordingGlobal = false;
-                        document.removeEventListener("keydown", keydownListener);
-                        document.removeEventListener("keyup", keyupListener);
-                    }
-                    keyLists.push(Array.from(keys));
-                };
+function handleGlobalKey(e: KeyboardEvent): boolean {
+    const combo = comboFromEvent(e);
+    if (!combo) return false;
+    if (!hasModifier(combo) && isEditableTarget(e.target)) return false;
 
-                const keydownListener = (e: KeyboardEvent) => {
-                    const { key } = e;
-                    if (!keys.has(key)) {
-                        keys.add(key);
-                    }
-                    updateKeys();
-                };
+    const openHotkey = Array.isArray(settings.store.hotkey) && settings.store.hotkey.length > 0
+        ? settings.store.hotkey
+        : DEFAULT_HOTKEY;
 
-                const keyupListener = (e: KeyboardEvent) => {
-                    keys.delete(e.key);
-                    updateKeys();
-                };
-
-                document.addEventListener("keydown", keydownListener);
-                document.addEventListener("keyup", keyupListener);
-            };
-
-            return (
-                <>
-                    <div className={cl("key-recorder-container")} onClick={() => recordKeybind(setIsRecording)}>
-                        <div className={`${cl("key-recorder")} ${isRecording ? cl("recording") : ""}`}>
-                            {settings.store.hotkey.map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" + ")}
-                            <button className={`${cl("key-recorder-button")} ${isRecording ? cl("recording-button") : ""}`} disabled={isRecording}>
-                                {isRecording ? "Recording..." : "Record keybind"}
-                            </button>
-                        </div>
-                    </div>
-                </>
-            );
-        }
-    },
-    allowMouseControl: {
-        description: "Allow the mouse to control the command palette.",
-        type: OptionType.BOOLEAN,
-        default: true
+    if (comboEquals(combo, openHotkey)) {
+        togglePalette();
+        return true;
     }
-});
 
+    for (const [commandId, hotkey] of Object.entries(getAllHotkeys())) {
+        if (!comboEquals(combo, hotkey)) continue;
+
+        const command = getCommandById(commandId);
+        if (!command) continue;
+        if (command.predicate && !command.predicate()) continue;
+
+        if (command.page) {
+            recordUse(commandId);
+            openPalette(command.page());
+        } else if (command.actions?.[0]) {
+            recordUse(commandId);
+            void command.actions[0].run(headlessCtx);
+        } else {
+            continue;
+        }
+        return true;
+    }
+
+    return false;
+}
 
 export default definePlugin({
     name: "CommandPalette",
-    description: "Allows you to navigate the UI with a keyboard.",
-    authors: [Devs.Ethan],
+    description: "Raycast style command palette for running actions anywhere in Discord",
+    authors: [EquicordDevs.justjxke],
+    tags: ["Customisation", "Commands", "Shortcuts"],
+    dependencies: ["UserSettingsAPI"],
     settings,
 
-    start() {
-        document.addEventListener("keydown", this.event);
+    async start() {
+        installKeyboardListeners();
+        setGlobalKeyHandler(handleGlobalKey);
 
-        registerAction({
-            id: "openDevSettings",
-            label: "Open Dev tab",
-            callback: () => SettingsRouter.open("EquicordPatchHelper"),
-            registrar: "Equicord"
-        });
+        await Promise.all([loadFrecency(), loadPins(), loadAliases(), loadHotkeys()]);
+        await registerBuiltinCommands();
     },
 
     stop() {
-        document.removeEventListener("keydown", this.event);
-    },
-
-
-    event(e: KeyboardEvent) {
-
-        enum Modifiers {
-            control = "ctrlKey",
-            shift = "shiftKey",
-            alt = "altKey",
-            meta = "metaKey"
-        }
-
-        const { hotkey } = settings.store;
-        const pressedKey = e.key.toLowerCase();
-
-        if (isRecordingGlobal) return;
-
-        for (let i = 0; i < hotkey.length; i++) {
-            const lowercasedRequiredKey = hotkey[i].toLowerCase();
-
-            if (lowercasedRequiredKey in Modifiers && !e[Modifiers[lowercasedRequiredKey]]) {
-                return;
-            }
-
-            if (!(lowercasedRequiredKey in Modifiers) && pressedKey !== lowercasedRequiredKey) {
-                return;
-            }
-        }
-
-        closeAllModals();
-
-        if (document.querySelector(`.${cl("root")}`)) return;
-
-        openCommandPalette();
+        closePalette();
+        removeKeyboardListeners();
+        clearRegistry();
     }
 });

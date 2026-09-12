@@ -9,20 +9,22 @@ import "./styles.css";
 import * as DataStore from "@api/DataStore";
 import { Settings } from "@api/Settings";
 import { ErrorCard } from "@components/ErrorCard";
+import { HeadingPrimary, HeadingTertiary } from "@components/Heading";
 import { OpenExternalIcon } from "@components/Icons";
+import { Paragraph } from "@components/Paragraph";
 import { SettingsTab, wrapTab } from "@components/settings";
+import { SearchStatus, Theme, ThemeLikeProps } from "@equicordplugins/themeLibrary/types";
 import { Logger } from "@utils/Logger";
 import { Margins } from "@utils/margins";
 import { classes } from "@utils/misc";
-import { findByPropsLazy } from "@webpack";
-import { Button, Forms, React, SearchableSelect, TabBar, TextInput, useEffect, useState } from "@webpack/common";
+import { findCssClassesLazy } from "@webpack";
+import { Button, React, SearchableSelect, TextInput, useEffect, useState } from "@webpack/common";
 
-import { SearchStatus, TabItem, Theme, ThemeLikeProps } from "../types";
 import { ThemeCard } from "./ThemeCard";
 
-const InputStyles = findByPropsLazy("inputWrapper", "inputError", "error");
+const InputStyles = findCssClassesLazy("inputWrapper", "editable", "error");
 
-export const apiUrl = "https://discord-themes.com/api";
+export const apiUrl = "https://themes.equicord.org/api";
 export const logger = new Logger("ThemeLibrary", "#e5c890");
 
 export async function fetchAllThemes(): Promise<Theme[]> {
@@ -57,17 +59,18 @@ const SearchTags = {
 function ThemeTab() {
     const [themes, setThemes] = useState<Theme[]>([]);
     const [filteredThemes, setFilteredThemes] = useState<Theme[]>([]);
-    const [themeLinks, setThemeLinks] = useState(Vencord.Settings.themeLinks);
+    const [themeLinks, setThemeLinks] = useState(Settings.themeLinks);
     const [likedThemes, setLikedThemes] = useState<ThemeLikeProps>();
     const [searchValue, setSearchValue] = useState({ value: "", status: SearchStatus.ALL });
     const [hideWarningCard, setHideWarningCard] = useState(Settings.plugins.ThemeLibrary.hideWarningCard);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(false);
 
     const onSearch = (query: string) => setSearchValue(prev => ({ ...prev, value: query }));
     const onStatusChange = (status: SearchStatus) => setSearchValue(prev => ({ ...prev, status }));
 
     const themeFilter = (theme: Theme) => {
-        const enabled = themeLinks.includes(`${apiUrl}/${theme.name}`);
+        const enabled = themeLinks.includes(`${apiUrl}/${theme.id}`);
 
         const tags = new Set(theme.tags.map(tag => tag?.toLowerCase()));
 
@@ -113,6 +116,7 @@ function ThemeTab() {
                 setFilteredThemes(themes);
             } catch (err) {
                 logger.error(err);
+                setError(true);
             } finally {
                 setLoading(false);
             }
@@ -121,7 +125,7 @@ function ThemeTab() {
     }, []);
 
     useEffect(() => {
-        setThemeLinks(Vencord.Settings.themeLinks);
+        setThemeLinks(Settings.themeLinks);
     }, []);
 
     useEffect(() => {
@@ -159,14 +163,19 @@ function ThemeTab() {
                         }}> This won't take long! </p>
 
                     </div>
+                ) : error ? (
+                    <ErrorCard>
+                        <HeadingTertiary>Failed to fetch themes</HeadingTertiary>
+                        <Paragraph className={Margins.top8}>Could not fetch the theme list. Try again later.</Paragraph>
+                    </ErrorCard>
                 ) : (
                     <>
                         {hideWarningCard ? null : (
                             <ErrorCard>
-                                <Forms.FormTitle tag="h4">Want your theme removed?</Forms.FormTitle>
-                                <Forms.FormText className={Margins.top8}>
+                                <HeadingTertiary>Want your theme removed?</HeadingTertiary>
+                                <Paragraph className={Margins.top8}>
                                     If you want your theme(s) permanently removed, please open an issue on <a href="https://github.com/Faf4a/plugins/issues/new?labels=removal&projects=&template=request_removal.yml&title=Theme+Removal">GitHub <OpenExternalIcon height={16} width={16} /></a>
-                                </Forms.FormText>
+                                </Paragraph>
                                 <Button
                                     onClick={() => {
                                         Settings.plugins.ThemeLibrary.hideWarningCard = true;
@@ -180,13 +189,13 @@ function ThemeTab() {
                             </ErrorCard>
                         )}
                         <div className={classes(Margins.bottom8, Margins.top16)}>
-                            <Forms.FormTitle tag="h2"
+                            <HeadingPrimary
                                 style={{
                                     overflowWrap: "break-word",
                                     marginTop: 8,
                                 }}>
                                 {searchValue.status === SearchStatus.LIKED ? "Most Liked" : "Newest Additions"}
-                            </Forms.FormTitle>
+                            </HeadingPrimary>
 
                             {themes.slice(0, 2).map((theme: Theme) => (
                                 <ThemeCard
@@ -199,12 +208,12 @@ function ThemeTab() {
                                 />
                             ))}
                         </div>
-                        <Forms.FormTitle tag="h2" style={{
+                        <HeadingPrimary style={{
                             overflowWrap: "break-word",
                             marginTop: 20,
                         }}>
                             Themes
-                        </Forms.FormTitle>
+                        </HeadingPrimary>
                         <div className={classes(Margins.bottom20, "vce-search-grid")}>
                             <TextInput value={searchValue.value} placeholder="Search for a theme..." onChange={onSearch} />
                             <div className={InputStyles.inputWrapper}>
@@ -260,57 +269,10 @@ function ThemeTab() {
     );
 }
 
-// rework this!
-function SubmitThemes() {
-    return (
-        <div
-            style={{
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "center",
-                alignItems: "center",
-                height: "70vh",
-                fontSize: "1.5em",
-                color: "var(--text-default)"
-            }}>
-            <p> This tab was replaced in favour of the new website: </p>
-            <p><a href="https://discord-themes.com" target="_blank" rel="noreferrer">discord-themes.com</a></p>
-            <p style={{
-                fontSize: ".75em",
-                color: "var(--text-muted)"
-            }}> Thank you for your understanding!</p>
-        </div>
-    );
-}
-
-
 function ThemeLibrary() {
-    const [currentTab, setCurrentTab] = useState(TabItem.THEMES);
-
     return (
-        <SettingsTab title="Theme Library">
-            <TabBar
-                type="top"
-                look="brand"
-                className="vc-settings-tab-bar"
-                selectedItem={currentTab}
-                onItemSelect={setCurrentTab}
-            >
-                <TabBar.Item
-                    className="vc-settings-tab-bar-item"
-                    id={TabItem.THEMES}
-                >
-                    Themes
-                </TabBar.Item>
-                <TabBar.Item
-                    className="vc-settings-tab-bar-item"
-                    id={TabItem.SUBMIT_THEMES}
-                >
-                    Submit Theme
-                </TabBar.Item>
-            </TabBar>
-
-            {currentTab === TabItem.THEMES ? <ThemeTab /> : <SubmitThemes />}
+        <SettingsTab>
+            <ThemeTab />
         </SettingsTab>
     );
 }

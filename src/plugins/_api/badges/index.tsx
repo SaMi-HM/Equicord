@@ -20,49 +20,67 @@ import "./fixDiscordBadgePadding.css";
 
 import { _getBadges, BadgePosition, BadgeUserArgs, ProfileBadge } from "@api/Badges";
 import ErrorBoundary from "@components/ErrorBoundary";
+import { CopyIcon, LinkIcon } from "@components/Icons";
 import { openContributorModal } from "@components/settings/tabs";
-import { isEquicordDonor } from "@components/settings/tabs/vencord";
 import { Devs } from "@utils/constants";
+import { copyWithToast } from "@utils/discord";
 import { Logger } from "@utils/Logger";
-import { copyWithToast, shouldShowContributorBadge, shouldShowEquicordContributorBadge } from "@utils/misc";
+import { shouldShowContributorBadge, shouldShowEquicordContributorBadge } from "@utils/misc";
 import definePlugin from "@utils/types";
-import { User } from "@vencord/discord-types";
 import { ContextMenuApi, Menu, Toasts, UserStore } from "@webpack/common";
 
-import { EquicordDonorModal, VencordDonorModal } from "./modals";
+import Plugins, { PluginMeta } from "~plugins";
+
+import { EquicordDonorModal, EquicordTranslatorModal, VencordDonorModal } from "./modals";
 
 const CONTRIBUTOR_BADGE = "https://cdn.discordapp.com/emojis/1092089799109775453.png?size=64";
-const EQUICORD_CONTRIBUTOR_BADGE = "https://i.imgur.com/57ATLZu.png";
-const EQUICORD_DONOR_BADGE = "https://cdn.nest.rip/uploads/78cb1e77-b7a6-4242-9089-e91f866159bf.png";
+const EQUICORD_CONTRIBUTOR_BADGE = "https://equicord.org/assets/favicon.png";
+const USERPLUGIN_CONTRIBUTOR_BADGE = "https://equicord.org/assets/icons/misc/userplugin.png";
 
 const ContributorBadge: ProfileBadge = {
+    id: "vencord_contributor_badge",
     description: "Vencord Contributor",
-    image: CONTRIBUTOR_BADGE,
+    iconSrc: CONTRIBUTOR_BADGE,
     position: BadgePosition.START,
     shouldShow: ({ userId }) => shouldShowContributorBadge(userId),
     onClick: (_, { userId }) => openContributorModal(UserStore.getUser(userId))
 };
 
 const EquicordContributorBadge: ProfileBadge = {
+    id: "equicord_contributor_badge",
     description: "Equicord Contributor",
-    image: EQUICORD_CONTRIBUTOR_BADGE,
+    iconSrc: EQUICORD_CONTRIBUTOR_BADGE,
     position: BadgePosition.START,
     shouldShow: ({ userId }) => shouldShowEquicordContributorBadge(userId),
-    onClick: (_, { userId }) => openContributorModal(UserStore.getUser(userId))
+    onClick: (_, { userId }) => openContributorModal(UserStore.getUser(userId)),
+    props: {
+        style: {
+            borderRadius: "50%",
+            transform: "scale(0.9)"
+        }
+    },
 };
 
-const EquicordDonorBadge: ProfileBadge = {
-    description: "Equicord Donor",
-    image: EQUICORD_DONOR_BADGE,
+const UserPluginContributorBadge: ProfileBadge = {
+    id: "user_plugin_contributor_badge",
+    description: "User Plugin Contributor",
+    iconSrc: USERPLUGIN_CONTRIBUTOR_BADGE,
     position: BadgePosition.START,
     shouldShow: ({ userId }) => {
-        const donorBadges = EquicordDonorBadges[userId]?.map(badge => badge.badge);
-        const hasDonorBadge = donorBadges?.includes("https://cdn.nest.rip/uploads/78cb1e77-b7a6-4242-9089-e91f866159bf.png");
-        return isEquicordDonor(userId) && !hasDonorBadge;
+        if (!IS_DEV) return false;
+        const allPlugins = Object.values(Plugins);
+        return allPlugins.some(p => {
+            const pluginMeta = PluginMeta[p.name];
+            return pluginMeta?.userPlugin && p.authors.some(a => a.id.toString() === userId);
+        });
     },
-    onClick: () => {
-        return EquicordDonorModal();
-    }
+    onClick: (_, { userId }) => openContributorModal(UserStore.getUser(userId)),
+    props: {
+        style: {
+            borderRadius: "50%",
+            transform: "scale(0.9)"
+        }
+    },
 };
 
 let DonorBadges = {} as Record<string, Array<Record<"tooltip" | "badge", string>>>;
@@ -77,7 +95,7 @@ async function loadBadges(url: string, noCache = false) {
 
 async function loadAllBadges(noCache = false) {
     const vencordBadges = await loadBadges("https://badges.vencord.dev/badges.json", noCache);
-    const equicordBadges = await loadBadges("https://equicord.org/badges.json", noCache);
+    const equicordBadges = await loadBadges("https://badge.equicord.org/badges.json", noCache);
 
     DonorBadges = vencordBadges;
     EquicordDonorBadges = equicordBadges;
@@ -85,7 +103,7 @@ async function loadAllBadges(noCache = false) {
 
 let intervalId: any;
 
-function BadgeContextMenu({ badge }: { badge: ProfileBadge & BadgeUserArgs; }) {
+export function BadgeContextMenu({ badge }: { badge: Omit<ProfileBadge, "id"> & BadgeUserArgs; }) {
     return (
         <Menu.Menu
             navId="vc-badge-context"
@@ -97,13 +115,15 @@ function BadgeContextMenu({ badge }: { badge: ProfileBadge & BadgeUserArgs; }) {
                     id="vc-badge-copy-name"
                     label="Copy Badge Name"
                     action={() => copyWithToast(badge.description!)}
+                    leadingAccessory={{ type: "icon", icon: CopyIcon }}
                 />
             )}
-            {badge.image && (
+            {badge.iconSrc && (
                 <Menu.MenuItem
                     id="vc-badge-copy-link"
                     label="Copy Badge Image Link"
-                    action={() => copyWithToast(badge.image!)}
+                    action={() => copyWithToast(badge.iconSrc!)}
+                    leadingAccessory={{ type: "icon", icon: LinkIcon }}
                 />
             )}
         </Menu.Menu>
@@ -117,22 +137,21 @@ export default definePlugin({
     required: true,
     patches: [
         {
-            find: ".MODAL]:26",
-            replacement: {
-                match: /(?=;return 0===(\i)\.length\?)(?<=(\i)\.useMemo.+?)/,
-                replace: ";$1=$2.useMemo(()=>[...$self.getBadges(arguments[0].displayProfile),...$1],[$1])"
-            }
-        },
-        {
             find: "#{intl::PROFILE_USER_BADGES}",
             replacement: [
                 {
-                    match: /(alt:" ","aria-hidden":!0,src:)(.+?)(?=,)(?<=href:(\i)\.link.+?)/,
-                    replace: (_, rest, originalSrc, badge) => `...${badge}.props,${rest}${badge}.image??(${originalSrc})`
+                    match: /alt:" ","aria-hidden":!0,src:.{0,50}(\i).iconSrc/,
+                    replace: "...$1.props,$&"
                 },
+                // Path with 2026-04-badge-discovery OFF
                 {
-                    match: /(?<="aria-label":(\i)\.description,.{0,200})children:/,
-                    replace: "children:$1.component?$self.renderBadgeComponent({...$1}) :"
+                    match: /(?<=forceOpen:.{0,40}?ariaHidden:!0,)children:(?=.{0,50}?(\i)\.id)/,
+                    replace: "children:$1.component?$self.renderBadgeComponent({...$1}):"
+                },
+                // Path with 2026-04-badge-discovery ON
+                {
+                    match: /(?<=fallbackIconSrc:.{0,50}?)children:(?=.{0,50}?(\i)\.id)/,
+                    replace: "children:$1.component?$self.renderBadgeComponent({...$1}):"
                 },
                 // handle onClick and onContextMenu
                 {
@@ -142,10 +161,10 @@ export default definePlugin({
             ]
         },
         {
-            find: "profileCardUsernameRow,children",
+            find: "getLegacyUsername(){",
             replacement: {
-                match: /(?<=accountProfileCard.{0,50}displayProfile:(\i).*?badges:)(\i)/,
-                replace: "[...$self.getBadges($1),...$2]"
+                match: /getBadges\(\)\{.{0,100}?return\[/,
+                replace: "$&...$self.getBadges(this),"
             }
         }
     ],
@@ -170,7 +189,7 @@ export default definePlugin({
         }
     },
 
-    userProfileBadges: [ContributorBadge, EquicordContributorBadge, EquicordDonorBadge],
+    userProfileBadges: [ContributorBadge, EquicordContributorBadge, UserPluginContributorBadge],
 
     async start() {
         await loadAllBadges();
@@ -182,15 +201,13 @@ export default definePlugin({
         clearInterval(intervalId);
     },
 
-    getBadges(props: { userId: string; user?: User; guildId: string; }) {
-        if (!props) return [];
+    getBadges(profile: { userId: string; guildId: string; }) {
+        if (!profile) return [];
 
         try {
-            props.userId ??= props.user?.id!;
-
-            return _getBadges(props);
+            return _getBadges(profile);
         } catch (e) {
-            new Logger("BadgeAPI#hasBadges").error(e);
+            new Logger("BadgeAPI#getBadges").error(e);
             return [];
         }
     },
@@ -199,7 +216,6 @@ export default definePlugin({
         const Component = badge.component!;
         return <Component {...badge} />;
     }, { noop: true }),
-
 
     getBadgeMouseEventHandlers(badge: ProfileBadge & BadgeUserArgs) {
         const handlers = {} as Record<string, (e: React.MouseEvent) => void>;
@@ -215,8 +231,9 @@ export default definePlugin({
     },
 
     getDonorBadges(userId: string) {
-        return DonorBadges[userId]?.map(badge => ({
-            image: badge.badge,
+        return DonorBadges[userId]?.map((badge, idx) => ({
+            id: `vencord_donor_badge_${idx}`,
+            iconSrc: badge.badge,
             description: badge.tooltip,
             position: BadgePosition.START,
             props: {
@@ -235,8 +252,9 @@ export default definePlugin({
     },
 
     getEquicordDonorBadges(userId: string) {
-        return EquicordDonorBadges[userId]?.map(badge => ({
-            image: badge.badge,
+        return EquicordDonorBadges[userId]?.map((badge, idx) => ({
+            id: `equicord_donor_badge_${idx}`,
+            iconSrc: badge.badge,
             description: badge.tooltip,
             position: BadgePosition.START,
             props: {
@@ -249,7 +267,7 @@ export default definePlugin({
                 ContextMenuApi.openContextMenu(event, () => <BadgeContextMenu badge={badge} />);
             },
             onClick() {
-                return EquicordDonorModal();
+                return badge.tooltip === "Equicord Translator" ? EquicordTranslatorModal() : EquicordDonorModal();
             },
         } satisfies ProfileBadge));
     }

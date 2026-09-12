@@ -6,12 +6,15 @@
 
 import "./styles.css";
 
+import { AudioProcessor, PreprocessAudioData } from "@api/AudioPlayer";
 import { get as getFromDataStore } from "@api/DataStore";
 import { definePluginSettings } from "@api/Settings";
-import { classNameFactory } from "@api/Styles";
+import { Button } from "@components/Button";
+import { Heading } from "@components/Heading";
 import { Devs } from "@utils/constants";
+import { classNameFactory } from "@utils/css";
 import definePlugin, { OptionType, StartAt } from "@utils/types";
-import { Button, Forms, React, showToast, TextInput } from "@webpack/common";
+import { React, showToast, TextInput } from "@webpack/common";
 
 import { getAllAudio, getAudioDataURI } from "./audioStore";
 import { SoundOverrideComponent } from "./SoundOverrideComponent";
@@ -42,42 +45,55 @@ function setOverride(id: string, override: SoundOverride) {
     settings.store[id] = JSON.stringify(override);
 }
 
-export function getCustomSoundURL(id: string): string | null {
-    const override = getOverride(id);
+export const getCustomSoundURL: AudioProcessor = (data: PreprocessAudioData) => {
+    let audioOverride = data.audio;
+
+    if (data.audio in seasonalSounds) {
+        audioOverride = soundTypes.find(sound => sound.seasonal?.includes(data.audio))?.id || data.audio;
+    }
+
+    const override = getOverride(audioOverride);
 
     if (!override?.enabled) {
-        return null;
+        return;
     }
 
     if (override.selectedSound === "custom" && override.selectedFileId) {
         const dataUri = dataUriCache.get(override.selectedFileId);
         if (dataUri) {
-            console.log(`[CustomSounds] Returning cached data URI for ${id}`);
-            return dataUri;
+            data.audio = dataUri;
+            data.volume = override.volume;
+            return;
         } else {
-            console.warn(`[CustomSounds] No cached data URI for ${id} with file ID ${override.selectedFileId}`);
-            return null;
+            return;
         }
     }
 
     if (override.selectedSound !== "default" && override.selectedSound !== "custom") {
         if (override.selectedSound in seasonalSounds) {
-            return seasonalSounds[override.selectedSound];
+            data.audio = seasonalSounds[override.selectedSound];
+            data.volume = override.volume;
+            return;
         }
 
-        const soundType = allSoundTypes.find(t => t.id === id);
+        const soundType = allSoundTypes.find(t => t.id === data.audio);
+
         if (soundType?.seasonal) {
             const seasonalId = soundType.seasonal.find(seasonalId =>
                 seasonalId.startsWith(`${override.selectedSound}_`)
             );
+
             if (seasonalId && seasonalId in seasonalSounds) {
-                return seasonalSounds[seasonalId];
+                data.audio = seasonalSounds[seasonalId];
+                data.volume = override.volume;
+                return;
             }
         }
     }
 
-    return null;
-}
+    data.volume = override.volume;
+    return;
+};
 
 export async function ensureDataURICached(fileId: string): Promise<string | null> {
     if (dataUriCache.has(fileId)) {
@@ -310,21 +326,21 @@ const settings = definePluginSettings({
             return (
                 <div>
                     <div className="vc-custom-sounds-buttons">
-                        <Button color={Button.Colors.BRAND} onClick={triggerFileUpload}>Import</Button>
-                        <Button color={Button.Colors.PRIMARY} onClick={downloadSettings}>Export</Button>
-                        <Button color={Button.Colors.RED} onClick={resetOverrides}>Reset All</Button>
-                        <Button color={Button.Colors.WHITE} onClick={debugCustomSounds}>Debug</Button>
+                        <Button variant="primary" onClick={triggerFileUpload}>Import</Button>
+                        <Button variant="secondary" onClick={downloadSettings}>Export</Button>
+                        <Button variant="dangerPrimary" onClick={resetOverrides}>Reset All</Button>
+                        <Button variant="overlayPrimary" onClick={debugCustomSounds}>Debug</Button>
                         <input
+                            className={cl("file-input")}
                             ref={fileInputRef}
                             type="file"
                             accept=".json"
-                            style={{ display: "none" }}
                             onChange={handleSettingsUpload}
                         />
                     </div>
 
                     <div className={cl("search")}>
-                        <Forms.FormTitle>Search Sounds</Forms.FormTitle>
+                        <Heading>Search Sounds</Heading>
                         <TextInput
                             value={searchQuery}
                             onChange={e => setSearchQuery(e)}
@@ -378,41 +394,12 @@ export function findOverride(id: string): SoundOverride | null {
 export default definePlugin({
     name: "CustomSounds",
     description: "Customize Discord's sounds.",
+    dependencies: ["AudioPlayerAPI"],
+    tags: ["Customisation", "Notifications", "Voice"],
     authors: [Devs.ScattrdBlade, Devs.TheKodeToad],
-    patches: [
-        {
-            find: 'Error("could not play audio")',
-            replacement: [
-                {
-                    match: /(?<=new Audio;\i\.src=).{0,75}.concat\(this\.name,"\.mp3"\)\)/,
-                    replace: "$self.getSoundUrl(this.name,$&)"
-                },
-                {
-                    match: /Math.min\(\i\.\i\.getOutputVolume\(\).{0,20}volume/,
-                    replace: "$& * ($self.findOverride(this.name)?.volume ?? 100) / 100"
-                }
-            ]
-        },
-        {
-            find: ".playWithListener().then",
-            replacement: {
-                match: /\i\.\i\.getSoundpack\(\)/,
-                replace: '$self.isOverriden(arguments[0]) ? "classic" : $&'
-            }
-        }
-    ],
-    getSoundUrl(name, extra) {
-        const customUrl = this.getCustomSoundURL(name);
-        return customUrl || extra;
-    },
     settings,
-    findOverride,
-    isOverriden,
-    getCustomSoundURL,
-    refreshDataURI,
-    ensureDataURICached,
-    debugCustomSounds,
     startAt: StartAt.Init,
+    audioProcessor: getCustomSoundURL,
 
     async start() {
         console.log("[CustomSounds] Plugin starting...");
@@ -423,5 +410,9 @@ export default definePlugin({
         } catch (error) {
             console.error("[CustomSounds] Startup failed:", error);
         }
+    },
+
+    stop() {
+        console.log("[CustomSounds] Plugin stopped");
     }
 });

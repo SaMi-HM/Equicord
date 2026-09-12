@@ -22,7 +22,7 @@ import { ChannelStore, moment, UserStore } from "@webpack/common";
 
 import { DBMessageStatus } from "../db";
 import { LoggedMessageJSON } from "../types";
-import { DEFAULT_IMAGE_CACHE_DIR } from "./constants";
+import { DEFAULT_ATTACHMENT_FILE_EXTENSIONS, DEFAULT_IMAGE_CACHE_DIR } from "./constants";
 import { DISCORD_EPOCH } from "./index";
 import { memoize } from "./memoize";
 
@@ -72,8 +72,6 @@ export const sortMessagesByDate = (timestampA: string, timestampB: string) => {
     }
 };
 
-
-
 // stolen from mlv2
 export function findLastIndex<T>(array: T[], predicate: (e: T, t: number, n: T[]) => boolean) {
     let l = array.length;
@@ -94,7 +92,6 @@ export const mapTimestamp = (m: any) => {
     if (m.embeds) m.embeds = m.embeds.map(e => sanitizeEmbed(m.channel_id, m.id, e));
     return m;
 };
-
 
 export const messageJsonToMessageClass = memoize((log: { message: LoggedMessageJSON; }) => {
     // console.time("message populate");
@@ -128,7 +125,6 @@ export const messageJsonToMessageClass = memoize((log: { message: LoggedMessageJ
     return message;
 });
 
-
 export function parseJSON(json?: string | null) {
     try {
         return JSON.parse(json!);
@@ -148,9 +144,11 @@ export function getNative(): PluginNative<typeof import("../native")> {
             writeLogs: async () => { },
             getDefaultNativeImageDir: async () => DEFAULT_IMAGE_CACHE_DIR,
             getDefaultNativeDataDir: async () => "",
+            getDefaultAttachmentFileExtensions: async () => DEFAULT_ATTACHMENT_FILE_EXTENSIONS,
+            updateAllowedExtensions: async () => { },
             deleteFileNative: async () => { },
             chooseDir: async (x: string) => "",
-            getSettings: async () => ({ imageCacheDir: DEFAULT_IMAGE_CACHE_DIR, logsDir: "" }),
+            getSettings: async () => ({ imageCacheDir: DEFAULT_IMAGE_CACHE_DIR, logsDir: "", attachmentFileExtensions: DEFAULT_ATTACHMENT_FILE_EXTENSIONS }),
             init: async () => { },
             initDirs: async () => { },
             getImageNative: async (x: string) => new Uint8Array(0),
@@ -158,12 +156,14 @@ export function getNative(): PluginNative<typeof import("../native")> {
             messageLoggerEnhancedUniqueIdThingyIdkMan: async () => { },
             showItemInFolder: async () => { },
             writeImageNative: async () => { },
-            getCommitHash: async () => ({ ok: true, value: "" }),
-            getRepoInfo: async () => ({ ok: true, value: { repo: "", gitHash: "" } }),
-            getNewCommits: async () => ({ ok: true, value: [] }),
-            update: async () => ({ ok: true, value: "" }),
             chooseFile: async () => "",
             downloadAttachment: async () => ({ error: "web", path: null }),
+            startNativeLogExport: async () => "" as any,
+            finishNativeLogExport: async () => { },
+            writeNativeLogChunk: async () => { },
+            startNativeLogImport: async () => "" as any,
+            readNativeLogChunk: async () => null,
+            closeNativeLogImport: async () => { }
         } satisfies PluginNative<typeof import("../native")>;
 
         return Native;

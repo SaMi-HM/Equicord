@@ -23,7 +23,6 @@ import definePlugin from "@utils/types";
 import { Channel, Message } from "@vencord/discord-types";
 import { Constants, Menu, PermissionsBits, PermissionStore, RestAPI, UserStore } from "@webpack/common";
 
-
 const EMBED_SUPPRESSED = 1 << 2;
 
 const messageContextMenuPatch: NavContextMenuPatchCallback = (
@@ -40,7 +39,7 @@ const messageContextMenuPatch: NavContextMenuPatchCallback = (
 
     const menuGroup = findGroupChildrenByChildId("delete", children);
     const deleteIndex = menuGroup?.findIndex(i => i?.props?.id === "delete");
-    if (!deleteIndex || !menuGroup) return;
+    if (deleteIndex == null || !menuGroup) return;
 
     menuGroup.splice(deleteIndex - 1, 0, (
         <Menu.MenuItem
@@ -49,6 +48,7 @@ const messageContextMenuPatch: NavContextMenuPatchCallback = (
             label={isEmbedSuppressed ? "Unsuppress Embeds" : "Suppress Embeds"}
             color={isEmbedSuppressed ? undefined : "danger"}
             icon={isEmbedSuppressed ? ImageVisible : ImageInvisible}
+            leadingAccessory={{ type: "icon", icon: isEmbedSuppressed ? ImageVisible : ImageInvisible }}
             action={() =>
                 RestAPI.patch({
                     url: Constants.Endpoints.MESSAGE(channel.id, messageId),
@@ -63,6 +63,7 @@ export default definePlugin({
     name: "UnsuppressEmbeds",
     authors: [Devs.rad, Devs.HypedDomi],
     description: "Allows you to unsuppress embeds in messages",
+    tags: ["Chat", "Utility"],
     contextMenus: {
         "message": messageContextMenuPatch
     }

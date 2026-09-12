@@ -17,7 +17,7 @@
 */
 
 import { Logger } from "@utils/Logger";
-import type { Channel, CustomEmoji, Message } from "@vencord/discord-types";
+import type { Channel, CloudUpload, CustomEmoji, Message } from "@vencord/discord-types";
 import { MessageStore } from "@webpack/common";
 import type { Promisable } from "type-fest";
 
@@ -30,63 +30,51 @@ export interface MessageObject {
     tts: boolean;
 }
 
-export interface Upload {
-    classification: string;
-    currentSize: number;
-    description: string | null;
-    filename: string;
-    id: string;
-    isImage: boolean;
-    isRemix?: boolean;
-    isThumbnail: boolean;
-    isVideo: boolean;
-    item: {
-        file: File;
-        platform: number;
-    };
-    loaded: number;
-    mimeType: string;
-    preCompressionSize: number;
-    responseUrl: string;
-    sensitive: boolean;
-    showLargeMessageDialog: boolean;
-    spoiler: boolean;
-    status: "NOT_STARTED" | "STARTED" | "UPLOADING" | "ERROR" | "COMPLETED" | "CANCELLED";
-    uniqueId: string;
-    uploadedFilename: string;
+export interface MessageContentOptions {
+    content: string;
+    channelId: string;
+    command: unknown | null;
+    isGif?: boolean;
+    stickers?: string[];
+    uploads?: CloudUpload[];
+    alsoForwardToChannelId?: string;
+
+    // If you end up using these, update their type
+    scheduledTimestamp?: unknown;
+    mediaMention?: unknown;
 }
 
-export interface MessageReplyOptions {
-    messageReference: Message["messageReference"];
+export interface SendMessageOptions extends MessageContentOptions {
+    messageReference?: Message["messageReference"];
     allowedMentions?: {
-        parse: Array<string>;
-        users?: Array<string>;
-        roles?: Array<string>;
+        parse: string[];
         repliedUser: boolean;
     };
+    location: string;
+    stickerIds?: string[];
 }
 
-export interface MessageOptions {
-    stickers?: string[];
-    uploads?: Upload[];
-    replyOptions: MessageReplyOptions;
+export interface SendMessageProps {
+    hasStickers: boolean;
+    hasAttachments: boolean;
     content: string;
     channel: Channel;
     type?: any;
     openWarningPopout: (props: any) => any;
 }
 
-export type MessageSendListener = (channelId: string, messageObj: MessageObject, options: MessageOptions) => Promisable<void | { cancel: boolean; }>;
+export type MessageSendListener = (channelId: string, messageObj: MessageObject, options: SendMessageOptions, props: SendMessageProps) => Promisable<void | { cancel: boolean; }>;
 export type MessageEditListener = (channelId: string, messageId: string, messageObj: MessageObject) => Promisable<void | { cancel: boolean; }>;
 
 const sendListeners = new Set<MessageSendListener>();
 const editListeners = new Set<MessageEditListener>();
 
-export async function _handlePreSend(channelId: string, messageObj: MessageObject, options: MessageOptions, replyOptions: MessageReplyOptions) {
-    options.replyOptions = replyOptions;
+export async function _handlePreSend(channelId: string, messageObj: MessageObject, options: SendMessageOptions, props: SendMessageProps, contentOptions: MessageContentOptions) {
+    options = { ...contentOptions, ...options };
+
     for (const listener of sendListeners) {
         try {
-            const result = await listener(channelId, messageObj, options);
+            const result = await listener(channelId, messageObj, options, props);
             if (result?.cancel) {
                 return true;
             }
@@ -131,7 +119,6 @@ export function removeMessagePreSendListener(listener: MessageSendListener) {
 export function removeMessagePreEditListener(listener: MessageEditListener) {
     return editListeners.delete(listener);
 }
-
 
 // Message clicks
 export type MessageClickListener = (message: Message, channel: Channel, event: MouseEvent) => void;

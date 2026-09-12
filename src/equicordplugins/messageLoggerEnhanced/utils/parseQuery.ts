@@ -22,7 +22,6 @@ import { LoggedMessageJSON } from "../types";
 import { getGuildIdByChannel } from "./index";
 import { memoize } from "./memoize";
 
-
 const validIdSearchTypes = ["server", "guild", "channel", "in", "user", "from", "message", "has", "before", "after", "around", "near", "during"] as const;
 type ValidIdSearchTypesUnion = typeof validIdSearchTypes[number];
 

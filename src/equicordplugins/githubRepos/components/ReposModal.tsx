@@ -4,98 +4,68 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { ModalContent, ModalFooter, ModalHeader, ModalRoot } from "@utils/modal";
-import { Button, Forms, React } from "@webpack/common";
+import { RepoGroup, RepoSortMode } from "@equicordplugins/githubRepos/types";
+import { PERSONAL_GROUP_KEY, sortGroups } from "@equicordplugins/githubRepos/utils";
+import { RenderModalProps } from "@vencord/discord-types";
+import { Modal, React, useState } from "@webpack/common";
 
-import { getLanguageColor } from "../colors";
-import { GitHubRepo } from "../types";
-import { Star } from "./Star";
+import { cl, settings } from "..";
+import { RepoCard } from "./RepoCard";
+import { RepoSubTabs } from "./RepoSubTabs";
 
 interface ReposModalProps {
-    repos: GitHubRepo[];
+    groups: RepoGroup[];
+    initialActiveKey: string;
     username: string;
     rootProps: any;
 }
 
-export function ReposModal({ repos, username, rootProps }: ReposModalProps) {
-    const renderTableHeader = () => (
-        <thead>
-            <tr>
-                <th>Repository</th>
-                <th>Description</th>
-                <th>Language</th>
-                <th>Stars</th>
-            </tr>
-        </thead>
-    );
+export function ReposModal({ groups, initialActiveKey, username, rootProps }: ReposModalProps & { rootProps: RenderModalProps; }) {
+    const [activeKey, setActiveKey] = useState(initialActiveKey);
+    const [sortMode, setSortMode] = useState<RepoSortMode>("count");
 
-    const renderTableRow = (repo: GitHubRepo) => (
-        <tr key={repo.id} onClick={() => window.open(repo.html_url, "_blank")}>
-            <td>
-                <div className="vc-github-repos-table-name">{repo.name}</div>
-            </td>
-            <td>
-                <div className="vc-github-repos-table-description">
-                    {repo.description || ""}
-                </div>
-            </td>
-            <td>
-                {repo.language && (
-                    <div className="vc-github-repos-table-language">
-                        <span
-                            className="vc-github-repos-table-language-color"
-                            style={{ backgroundColor: getLanguageColor(repo.language) }}
-                        />
-                        <span>{repo.language}</span>
-                    </div>
-                )}
-            </td>
-            <td>
-                <div className="vc-github-repos-table-stars">
-                    <Star className="vc-github-repos-table-star-icon" />
-                    <span>{repo.stargazers_count.toLocaleString()}</span>
-                </div>
-            </td>
-        </tr>
-    );
+    const sortedGroups = sortGroups(groups, sortMode);
+    const activeGroup = sortedGroups.find(g => g.key === activeKey) ?? sortedGroups[0];
 
     return (
-        <ModalRoot className="vc-github-repos-modal" size="large" {...rootProps}>
-            <ModalHeader>
-                <Forms.FormTitle tag="h2" className="vc-github-repos-modal-title">
-                    {username}'s GitHub Repositories
-                </Forms.FormTitle>
-            </ModalHeader>
-            <ModalContent className="vc-github-repos-modal-content">
-                <div className="vc-github-repos-table-container">
-                    <table className="vc-github-repos-table">
-                        <colgroup>
-                            <col style={{ width: "20%" }} />
-                            <col style={{ width: "45%" }} />
-                            <col style={{ width: "15%" }} />
-                            <col style={{ width: "10%" }} />
-                        </colgroup>
-                        {renderTableHeader()}
-                        <tbody>
-                            {repos.map(renderTableRow)}
-                        </tbody>
-                    </table>
+        <Modal
+            {...rootProps}
+            className={cl("modal")}
+            size="lg"
+            title={`${username}'s GitHub Repositories`}
+            actions={[
+                {
+                    text: "View on GitHub",
+                    variant: "link",
+                    onClick: () => window.open(`https://github.com/${username}?tab=repositories`, "_blank")
+                },
+                {
+                    text: "Close",
+                    variant: "secondary",
+                    onClick: rootProps.onClose
+                }
+            ]}
+        >
+            <div className={cl("modal-content")}>
+                <RepoSubTabs
+                    groups={sortedGroups}
+                    activeKey={activeGroup?.key ?? PERSONAL_GROUP_KEY}
+                    onSelect={setActiveKey}
+                    sortMode={sortMode}
+                    onToggleSort={() => setSortMode(mode => mode === "count" ? "alpha" : "count")}
+                    canSort={sortedGroups.length > 2}
+                />
+                <div className={cl("list", "modal-list")}>
+                    {activeGroup?.repos.map(repo => (
+                        <RepoCard
+                            key={repo.id}
+                            repo={repo}
+                            showStars={settings.store.showStars}
+                            showLanguage={settings.store.showLanguage}
+                        />
+                    ))}
                 </div>
-            </ModalContent>
-            <ModalFooter>
-                <Button
-                    onClick={() => window.open(`https://github.com/${username}?tab=repositories`, "_blank")}
-                >
-                    View on GitHub
-                </Button>
-                <Button
-                    color={Button.Colors.TRANSPARENT}
-                    look={Button.Looks.LINK}
-                    onClick={rootProps.onClose}
-                >
-                    Close
-                </Button>
-            </ModalFooter>
-        </ModalRoot>
+            </div>
+        </Modal>
     );
 }

@@ -1,6 +1,9 @@
 dist
 node_modules
 .VSCodeCounter
+.vars
+.secrets
+.input
 
 *.exe
 vencord_installer
@@ -29,3 +32,6 @@ ExtensionCache/
 
 # vencord companion module cache
 .modules
+
+# wakatime related stuff
+.wakatime-project

@@ -8,18 +8,19 @@ export const Native = getNative();
 
 import "./styles.css";
 
-import ErrorBoundary from "@components/ErrorBoundary";
-import { Devs } from "@utils/constants";
+import { LogsIcon } from "@components/Icons";
+import { Devs, EquicordDevs } from "@utils/constants";
+import { classNameFactory } from "@utils/css";
 import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
 import { findByPropsLazy } from "@webpack";
-import { FluxDispatcher, MessageStore, React, UserStore } from "@webpack/common";
+import { FluxDispatcher, MessageStore, SelectedChannelStore, UserStore } from "@webpack/common";
 
 import { OpenLogsButton } from "./components/LogsButton";
 import { openLogModal } from "./components/LogsModal";
 import * as idb from "./db";
-import { addMessage } from "./LoggedMessageManager";
 import * as LoggedMessageManager from "./LoggedMessageManager";
+import { addMessage } from "./LoggedMessageManager";
 import { settings } from "./settings";
 import { FetchMessagesResponse, LoadMessagePayload, LoggedMessage, LoggedMessageJSON, MessageCreatePayload, MessageDeleteBulkPayload, MessageDeletePayload, MessageUpdatePayload } from "./types";
 import { cleanUpCachedMessage, cleanupUserObject, getNative, isGhostPinged, mapTimestamp, messageJsonToMessageClass, reAddDeletedMessages } from "./utils";
@@ -34,29 +35,30 @@ export { settings };
 export const Flogger = new Logger("MessageLoggerEnhanced", "#f26c6c");
 
 export const cacheSentMessages = new LimitedMap<string, LoggedMessageJSON>();
+export const cl = classNameFactory("vc-msg-logger-enhanced-");
+
+let didClearLogsOnStartup = false;
 
 const cacheThing = findByPropsLazy("commit", "getOrCreate");
+
+export async function clearLogs(showToast = true) {
+    await idb.clearMessagesIDB(showToast);
+    cacheSentMessages.clear();
+}
 
 let oldGetMessage: typeof MessageStore.getMessage;
 
 const handledMessageIds = new Set();
 async function messageDeleteHandler(payload: MessageDeletePayload & { isBulk: boolean; }) {
-    if (payload.mlDeleted) {
-        if (settings.store.permanentlyRemoveLogByDefault)
-            await idb.deleteMessageIDB(payload.id);
-
-        return;
-    }
+    if (payload.mlDeleted) return;
 
     if (handledMessageIds.has(payload.id)) {
-        // Flogger.warn("skipping duplicate message", payload.id);
         return;
     }
 
     try {
         handledMessageIds.add(payload.id);
 
-        // @ts-ignore
         let message: LoggedMessage | LoggedMessageJSON | null =
             oldGetMessage?.(payload.channelId, payload.id);
         if (message == null) {
@@ -81,7 +83,6 @@ async function messageDeleteHandler(payload: MessageDeletePayload & { isBulk: bo
                 webhookId: message?.webhookId
             })
         ) {
-            // Flogger.log("IGNORING", message, payload);
             return FluxDispatcher.dispatch({
                 type: "MESSAGE_DELETE",
                 channelId: payload.channelId,
@@ -90,13 +91,12 @@ async function messageDeleteHandler(payload: MessageDeletePayload & { isBulk: bo
             });
         }
 
-
         if (message == null || message.channel_id == null || !message.deleted) return;
-        // Flogger.log("ADDING MESSAGE (DELETED)", message);
         if (payload.isBulk)
             return message;
 
-        await addMessage(message, ghostPinged ? idb.DBMessageStatus.GHOST_PINGED : idb.DBMessageStatus.DELETED);
+        const currentChannelId = SelectedChannelStore.getChannelId();
+        await addMessage(message, ghostPinged ? idb.DBMessageStatus.GHOST_PINGED : idb.DBMessageStatus.DELETED, currentChannelId);
     }
     finally {
         handledMessageIds.delete(payload.id);
@@ -112,6 +112,17 @@ async function messageDeleteBulkHandler({ channelId, guildId, ids }: MessageDele
     }
 
     await idb.addMessagesBulkIDB(messages);
+
+    if (messages.length > 0 && settings.store.timeBasedCleanupMinutes > 0) {
+        const currentChannelId = SelectedChannelStore.getChannelId();
+        const cutoffTime = new Date(Date.now() - settings.store.timeBasedCleanupMinutes * 60 * 1000).toISOString();
+        const oldGuildMessages = await idb.getOlderThanTimestampForGuildsIDB(cutoffTime, currentChannelId, settings.store.preserveCurrentChannel);
+
+        if (oldGuildMessages.length > 0) {
+            Flogger.info(`Deleting ${oldGuildMessages.length} old server messages older than ${settings.store.timeBasedCleanupMinutes} minutes (bulk cleanup)`);
+            await idb.deleteMessagesBulkIDB(oldGuildMessages.map(m => m.message_id));
+        }
+    }
 }
 
 async function messageUpdateHandler(payload: MessageUpdatePayload) {
@@ -133,7 +144,7 @@ async function messageUpdateHandler(payload: MessageUpdatePayload) {
             message.editHistory = [];
             cacheThing.commit(cache);
         }
-        return;//  Flogger.log("this message has been ignored", payload);
+        return;
     }
 
     let message = oldGetMessage?.(payload.message.channel_id, payload.message.id) as LoggedMessage | LoggedMessageJSON | null;
@@ -153,15 +164,14 @@ async function messageUpdateHandler(payload: MessageUpdatePayload) {
                 ]
             };
 
-            // @ts-ignore
             cacheSentMessages.set(`${payload.message.channel_id},${payload.message.id}`, message);
         }
     }
 
     if (message == null || message.channel_id == null || message.editHistory == null || message.editHistory.length === 0) return;
 
-    // Flogger.log("ADDING MESSAGE (EDITED)", message, payload);
-    await addMessage(message, idb.DBMessageStatus.EDITED);
+    const currentChannelId = SelectedChannelStore.getChannelId();
+    await addMessage(message, idb.DBMessageStatus.EDITED, currentChannelId);
 }
 
 function messageCreateHandler(payload: MessageCreatePayload) {
@@ -178,24 +188,31 @@ function messageCreateHandler(payload: MessageCreatePayload) {
     }
 
     cacheSentMessages.set(`${payload.message.channel_id},${payload.message.id}`, cleanUpCachedMessage(payload.message));
-    // Flogger.log(`cached\nkey:${payload.message.channel_id},${payload.message.id}\nvalue:`, payload.message);
 }
 
 async function processMessageFetch(response: FetchMessagesResponse) {
     try {
-        if (!response.ok || response.body.length === 0) {
+        if (!response.ok) {
             Flogger.error("Failed to fetch messages", response);
             return;
         }
 
+        if (!Array.isArray(response.body)) {
+            Flogger.error("Failed to fetch messages: response body is not an array", response);
+            return;
+        }
+
+        if (response.body.length === 0) return;
+
         const firstMessage = response.body[response.body.length - 1];
-        // console.time("fetching messages from idb");
         const messages = await idb.getMessagesByChannelAndAfterTimestampIDB(firstMessage.channel_id, firstMessage.timestamp);
-        // console.timeEnd("fetching messages from idb");
 
         if (!messages.length) return;
 
-        const deletedMessages = messages.filter(m => m.status === idb.DBMessageStatus.DELETED);
+        const deletedMessages = messages.filter(m =>
+            m.status === idb.DBMessageStatus.DELETED ||
+            m.status === idb.DBMessageStatus.GHOST_PINGED
+        );
 
         for (const recivedMessage of response.body) {
             const record = messages.find(m => m.message_id === recivedMessage.id);
@@ -217,7 +234,7 @@ async function processMessageFetch(response: FetchMessagesResponse) {
 
             for (let j = 0, len2 = message.mentions.length; j < len2; j++) {
                 const user = message.mentions[j];
-                const cachedUser = fetchUser(user);
+                const cachedUser = fetchUser((user as any).id || user);
                 if (cachedUser) (message.mentions[j] as any) = cleanupUserObject(cachedUser);
             }
 
@@ -235,9 +252,10 @@ async function processMessageFetch(response: FetchMessagesResponse) {
 
 export default definePlugin({
     name: "MessageLoggerEnhanced",
-    authors: [Devs.Aria],
-    description: "G'day",
-    dependencies: ["MessageLogger"],
+    authors: [Devs.Aria, EquicordDevs.keircn],
+    description: "Improves MessageLogger with edited message history, ghost ping detection and more",
+    tags: ["Chat", "Servers"],
+    dependencies: ["MessageLogger", "HeaderBarAPI"],
 
     patches: [
         {
@@ -255,30 +273,12 @@ export default definePlugin({
             ]
         },
         {
-            find: "THREAD_STARTER_MESSAGE?null==",
+            find: ".PREMIUM_REFERRAL&&(",
             replacement: {
                 match: /deleted:\i\.deleted, editHistory:\i\.editHistory,/,
                 replace: "deleted:$self.getDeleted(...arguments), editHistory:$self.getEdited(...arguments),"
             }
         },
-        {
-            find: ".controlButtonWrapper,",
-            predicate: () => settings.store.ShowLogsButton,
-            replacement: {
-                match: /(function \i\(\i\){)(.{1,200}toolbar.{1,100}mobileToolbar)/,
-                replace: "$1$self.addIconToToolBar(arguments[0]);$2"
-            }
-        },
-
-        {
-            find: "childrenMessageContent:null",
-            replacement: {
-                match: /(cozyMessage.{1,50},)childrenHeader:/,
-                replace: "$1childrenAccessories:arguments[0].childrenAccessories || null,childrenHeader:"
-            }
-        },
-
-        // https://regex101.com/r/S3IVGm/1
         // fix vidoes failing because there are no thumbnails
         {
             find: ".handleImageLoad)",
@@ -301,7 +301,7 @@ export default definePlugin({
 
         // only check for expired attachments if the message is not deleted
         {
-            find: "\"/ephemeral-attachments/\"",
+            find: ".ATTACHMENTS_REFRESH_URLS,",
             replacement: {
                 match: /\i\.attachments\.some\(\i\)\|\|\i\.embeds\.some/,
                 replace: "!arguments[0].deleted && $&"
@@ -316,20 +316,12 @@ export default definePlugin({
         }
     },
 
-    addIconToToolBar(e: { toolbar: React.ReactNode[] | React.ReactNode; }) {
-        if (Array.isArray(e.toolbar))
-            return e.toolbar.unshift(
-                <ErrorBoundary noop={true}>
-                    <OpenLogsButton />
-                </ErrorBoundary>
-            );
-
-        e.toolbar = [
-            <ErrorBoundary noop={true} key={"MessageLoggerEnhanced"} >
-                <OpenLogsButton />
-            </ErrorBoundary>,
-            e.toolbar,
-        ];
+    headerBarButton: {
+        icon: LogsIcon,
+        render() {
+            if (!settings.store.ShowLogsButton) return null;
+            return OpenLogsButton();
+        }
     },
 
     processMessageFetch,
@@ -382,16 +374,37 @@ export default definePlugin({
         // we have to do this because the original message logger fetches the message from the store now
         MessageStore.getMessage = (channelId: string, messageId: string) => {
             const MLMessage = idb.cachedMessages.get(messageId);
-            if (MLMessage) return messageJsonToMessageClass({ message: MLMessage });
+            if (!MLMessage)
+                return this.oldGetMessage(channelId, messageId);
 
-            return this.oldGetMessage(channelId, messageId);
+            if (MLMessage.deleted)
+                return messageJsonToMessageClass({ message: MLMessage });
+
+            // update the edited message with the latest data
+            const latestMessage = this.oldGetMessage(channelId, messageId);
+            return messageJsonToMessageClass({
+                message: {
+                    ...MLMessage,
+                    ...(latestMessage ?? {}),
+                }
+            });
         };
 
         Native.init();
 
-        const { imageCacheDir, logsDir } = await Native.getSettings();
+        if (settings.store.clearLogsOnRestart && !didClearLogsOnStartup) {
+            try {
+                await clearLogs(false);
+                didClearLogsOnStartup = true;
+            } catch (e) {
+                Flogger.error("Failed to clear logs on restart", e);
+            }
+        }
+
+        const { imageCacheDir, logsDir, attachmentFileExtensions } = await Native.getSettings();
         settings.store.imageCacheDir = imageCacheDir;
         settings.store.logsDir = logsDir;
+        settings.store.attachmentFileExtensions = attachmentFileExtensions ?? "none";
 
         setupContextMenuPatches();
     },

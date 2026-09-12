@@ -6,15 +6,16 @@
 
 import "./style.css";
 
-import { EquicordDevs } from "@utils/constants";
+import { InfoIcon } from "@components/Icons";
+import { Devs, EquicordDevs } from "@utils/constants";
 import { openUserProfile } from "@utils/discord";
 import { classes } from "@utils/misc";
 import definePlugin, { StartAt } from "@utils/types";
-import { findByPropsLazy } from "@webpack";
-import { Parser } from "@webpack/common";
+import { Guild } from "@vencord/discord-types";
+import { findByPropsLazy, findCssClassesLazy } from "@webpack";
+import { Parser, Tooltip, UserStore } from "@webpack/common";
 
-
-const AvatarStyles = findByPropsLazy("avatar", "zalgo");
+const AvatarStyles = findCssClassesLazy("avatar", "zalgo", "clickable");
 const GuildManager = findByPropsLazy("joinGuild");
 
 interface User {
@@ -30,46 +31,89 @@ function lurk(id: string) {
         .catch(() => { throw new Error("Guild is not lurkable"); });
 }
 
-
 export default definePlugin({
     name: "BetterInvites",
-    description: "See invites expiration date, view inviter profile and preview discoverable servers before joining by clicking their name",
-    authors: [EquicordDevs.iamme],
+    description: "See invites expiration date, view inviter profile and preview servers before joining by clicking the name",
+    tags: ["Appearance", "Customisation", "Chat", "Servers"],
+    authors: [EquicordDevs.iamme, Devs.thororen],
     patches: [
         {
-            find: "#{intl::HUB_INVITE_ANOTHER_SCHOOL_LINK}",
+            find: "#{intl::xdCLeM::raw}",
             replacement: [
                 {
-                    match: /,(\i)&&(\(.{0,50}asContainer.+)(\i\.\i\.string\(\i\.\i#{intl::GUEST_MEMBERSHIP_EXPLANATION}\))/,
-                    replace: ",($1||((!$1)&&arguments[0].invite.expires_at)) && $2$self.RenderTip($1, $3, arguments[0].invite.expires_at)"
-                },
-                {
-                    match: /(\.jsx\)\(\i.\i.Info,{.+onClick:\i)/,
-                    replace: "$& || $self.Lurkable(arguments[0].invite.guild.id, arguments[0].invite.guild.features)"
-                },
-                {
-                    match: /(\.jsx\)\(\i\.\i\.Header,\{)text:(\i)/,
-                    replace: "$1text: $self.Header(arguments[0].currentUserId, arguments[0].invite.inviter, $2)"
+                    match: /profile:\i,disableGuildNameClick:!\i/,
+                    replace: "$&,invite:arguments[0].invite"
                 }
             ]
-        }
+        },
+        {
+            find: "isBannerVisible:!1})},",
+            replacement: [
+                {
+                    match: /children:(\i)\.name\}\)\}\)\}\)/,
+                    replace: "onClick:$self.Lurkable($1),$&"
+                },
+                {
+                    match: /(profile:\i\}\))/,
+                    replace: "$1,$self.RenderTip(arguments[0]?.invite?.expires_at)"
+                },
+                {
+                    match: /(?<=\]\}\),)(?=.{0,15}onlineCount:\i\.onlineCount)/,
+                    replace: "$self.Header(arguments[0]?.invite?.inviter,arguments[0]?.profile?.name),"
+                },
+            ]
+        },
     ],
-    RenderTip(isGuest: boolean, message: string, expires_at: string) {
-        return <>This invite will expire {Parser.parse(`<t:${Math.round(new Date(expires_at).getTime() / 1000)}:R>`)}{isGuest ? ". " + message : ""}</>;
+    RenderTip(expires_at: string) {
+        if (!expires_at) return null;
+        const timestamp = <>{Parser.parse(`<t:${Math.round(new Date(expires_at).getTime() / 1000)}:R>`)}</>;
+        const tooltipText = (
+            <>
+                This invite will {expires_at ? <>expire {timestamp}</> : <>not expire</>}
+            </>
+        );
+
+        return (
+            <Tooltip text={tooltipText}>
+                {({ onMouseEnter, onMouseLeave }) => (
+                    <div
+                        className="vc-bi-tooltip"
+                        onMouseEnter={onMouseEnter}
+                        onMouseLeave={onMouseLeave}
+                    >
+                        <InfoIcon className="vc-bi-tooltip-icon" />
+                    </div>
+                )}
+            </Tooltip>
+        );
     },
-    Header(currentUserId: string, inviter: User | undefined, defaultMessage: string) {
-        return <div className="vc-bi-header-inner">
-            {(inviter && (currentUserId !== inviter.id)) ? <>
+    Header(inviter: User | undefined, guildName: string) {
+        if (!inviter) return null;
+
+        const userId = UserStore.getCurrentUser().id;
+        const isSelf = userId === inviter.id;
+
+        return (
+            <div className="vc-bi-header-inner">
                 <img
                     alt=""
                     className={classes(AvatarStyles.avatar, AvatarStyles.clickable) + " vc-bi-inviter-avatar"}
                     onClick={() => openUserProfile(inviter.id)}
-                    src={inviter.avatar ? `https://cdn.discordapp.com/avatars/${inviter.id}/${inviter.avatar}.webp?size=80` : "/assets/1f0bfc0865d324c2587920a7d80c609b.png?size=128"}
-                /> {inviter.global_name ? inviter.global_name.toUpperCase() : inviter.username.toUpperCase()} HAS INVITED YOU TO JOIN
-            </> : defaultMessage}</div>;
+                    src={inviter.avatar
+                        ? `https://cdn.discordapp.com/avatars/${inviter.id}/${inviter.avatar}.webp?size=80`
+                        : "/assets/1f0bfc0865d324c2587920a7d80c609b.png?size=128"}
+                />
+                <div className="vc-bi-header-text">
+                    {isSelf
+                        ? `You sent an invite to join ${guildName}`
+                        : `${inviter.global_name || inviter.username} invited you to ${guildName}`}
+                </div>
+            </div>
+        );
     },
-    Lurkable: (id: string, features: Iterable<string> | undefined) => {
-        return new Set(features).has("DISCOVERABLE") ? () => lurk(id) : null;
+    Lurkable: (guild?: Guild) => {
+        if (!guild) return null;
+        return new Set(guild.features).has("DISCOVERABLE") ? () => lurk(guild.id) : null;
     },
     startAt: StartAt.WebpackReady
 });
